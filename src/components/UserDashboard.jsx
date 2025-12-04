@@ -1,9 +1,9 @@
 // src/components/UserDashboard.jsx
-import { useState, useEffect } from 'react';
-import { format } from 'date-fns';
-import { formatInTimeZone } from 'date-fns-tz';
-import Layout from './Layout';
-import Api from '../API/Api';
+import { useState, useEffect } from "react";
+import { format } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
+import Layout from "./Layout";
+import Api from "../API/Api";
 import {
   BarChart,
   Bar,
@@ -15,14 +15,14 @@ import {
   Tooltip,
   ResponsiveContainer,
   LabelList,
-} from 'recharts';
+} from "recharts";
 
 function UserDashboard({ onLogout }) {
   const [files, setFiles] = useState([]);
   const [filtered, setFiltered] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const fetchUserFiles = async () => {
@@ -37,8 +37,8 @@ function UserDashboard({ onLogout }) {
         setFiles(fileData);
         setFiltered(fileData);
       } catch (err) {
-        console.error('Failed to load user files:', err);
-        setError('Unable to load your files.');
+        console.error("Failed to load user files:", err);
+        setError("Unable to load your files.");
       } finally {
         setLoading(false);
       }
@@ -52,43 +52,44 @@ function UserDashboard({ onLogout }) {
     if (!term) {
       setFiltered(files);
     } else {
-      const results = files.filter(f =>
-        f.Diary_Number?.toLowerCase().includes(term) ||
-        f.Case_Number?.toLowerCase().includes(term)
+      const results = files.filter(
+        (f) =>
+          f.Diary_Number?.toLowerCase().includes(term) ||
+          f.Case_Number?.toLowerCase().includes(term)
       );
       setFiltered(results);
     }
   }, [searchTerm, files]);
 
   const formatDateOnly = (dateStr) => {
-    if (!dateStr) return '';
+    if (!dateStr) return "";
     const date = new Date(dateStr);
-    return format(date, 'dd-MM-yy');
+    return format(date, "dd-MM-yy");
   };
 
   const formatDateTime = (dateStr) => {
-    if (!dateStr) return '';
-    return formatInTimeZone(dateStr, 'UTC', 'dd-MM-yy - HH:mm:ss');
+    if (!dateStr) return "";
+    return formatInTimeZone(dateStr, "UTC", "dd-MM-yy - HH:mm:ss");
   };
 
   const groupBy = (period) => {
     const counts = {};
-    files.forEach(file => {
+    files.forEach((file) => {
       const date = new Date(file.ServerDateTime);
-      let key = '';
+      let key = "";
 
       switch (period) {
-        case 'daily':
-          key = format(date, 'dd-MM-yy');
+        case "daily":
+          key = format(date, "dd-MM-yy");
           break;
-        case 'weekly':
-          key = format(date, 'ww-yyyy');
+        case "weekly":
+          key = format(date, "ww-yyyy");
           break;
-        case 'monthly':
-          key = format(date, 'MM-yyyy');
+        case "monthly":
+          key = format(date, "MM-yyyy");
           break;
-        case 'yearly':
-          key = format(date, 'yyyy');
+        case "yearly":
+          key = format(date, "yyyy");
           break;
         default:
           return;
@@ -99,20 +100,30 @@ function UserDashboard({ onLogout }) {
 
     return Object.entries(counts).map(([key, value]) => ({
       name: key,
-      count: value
+      count: value,
     }));
   };
 
   const chartColors = {
-    daily: '#6366f1',
-    weekly: '#10b981',
-    pie: ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#f43f5e'],
+    daily: "#6366f1",
+    weekly: "#10b981",
+    pie: [
+      "#6366f1",
+      "#10b981",
+      "#f59e0b",
+      "#ef4444",
+      "#3b82f6",
+      "#8b5cf6",
+      "#f43f5e",
+    ],
   };
 
   return (
     <Layout onLogout={onLogout}>
       <div className="p-4 md:p-6 bg-white shadow rounded-lg w-full">
-        <h2 className="text-2xl font-bold mb-4 text-gray-700">📁 My File Tracking History</h2>
+        <h2 className="text-2xl font-bold mb-4 text-gray-700">
+          📁 My File Tracking History
+        </h2>
 
         {/* Search */}
         <div className="flex gap-2 mb-4">
@@ -125,29 +136,47 @@ function UserDashboard({ onLogout }) {
           />
         </div>
 
-        {/* Desktop Table */}
+        {/* Desktop Table - Vibrant & Animated */}
         {!loading && filtered.length > 0 && (
           <div className="hidden sm:block overflow-x-auto mb-8 w-full">
-            <table className="table-auto w-full min-w-[700px] border text-sm">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="p-2 border">Diary #</th>
-                  <th className="p-2 border">Case #</th>
-                  <th className="p-2 border">Branch</th>
-                  <th className="p-2 border">Diary Date</th>
-                  <th className="p-2 border">Case Title</th>
-                  <th className="p-2 border">Receive Time</th>
+            <table className="min-w-[900px] w-full border-separate border-spacing-0 rounded-xl overflow-hidden shadow-lg">
+              <thead>
+                <tr className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 text-white text-left">
+                  <th className="p-3 font-semibold">Diary #</th>
+                  <th className="p-3 font-semibold">Case #</th>
+                  <th className="p-3 font-semibold">Branch</th>
+                  <th className="p-3 font-semibold">Diary Date</th>
+                  <th className="p-3 font-semibold">Case Title</th>
+                  <th className="p-3 font-semibold">Receive Time</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(file => (
-                  <tr key={file.ID} className="text-center hover:bg-gray-50">
-                    <td className="border p-1">{file.Diary_Number}</td>
-                    <td className="border p-1">{file.Case_Number}</td>
-                    <td className="border p-1">{file.Branch}</td>
-                    <td className="border p-1">{formatDateOnly(file.Institution_Date)}</td>
-                    <td className="border p-1">{file.Case_Name}</td>
-                    <td className="border p-1">{formatDateTime(file.ServerDateTime)}</td>
+                {filtered.map((file, idx) => (
+                  <tr
+                    key={file.ID}
+                    className={`
+              relative
+              ${
+                idx % 2 === 0
+                  ? "bg-gradient-to-r from-blue-50 to-indigo-50"
+                  : "bg-gradient-to-r from-pink-50 to-purple-50"
+              }
+              hover:scale-[1.02] hover:shadow-lg transition-transform duration-300
+              border-l-4 ${
+                idx % 2 === 0 ? "border-blue-400" : "border-pink-400"
+              }
+            `}
+                  >
+                    <td className="p-3">{file.Diary_Number}</td>
+                    <td className="p-3">{file.Case_Number}</td>
+                    <td className="p-3">{file.Branch}</td>
+                    <td className="p-3">
+                      {formatDateOnly(file.Institution_Date)}
+                    </td>
+                    <td className="p-3">{file.Case_Name}</td>
+                    <td className="p-3">
+                      {formatDateTime(file.ServerDateTime)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -162,31 +191,36 @@ function UserDashboard({ onLogout }) {
               <div
                 key={file.ID}
                 className={`p-3 rounded shadow text-sm border ${
-                  idx % 2 === 0 ? 'bg-blue-50' : 'bg-green-50'
+                  idx % 2 === 0 ? "bg-blue-50" : "bg-green-50"
                 }`}
               >
                 {/* Diary & Case on same line */}
                 <div className="flex justify-between font-medium flex-wrap">
                   <div className="flex flex-nowrap items-center">
-                    <span className="font-semibold">Diary:</span>&nbsp;{file.Diary_Number}
-                    <span className="font-semibold ml-2">Case:</span>&nbsp;{file.Case_Number}
+                    <span className="font-semibold">Diary:</span>&nbsp;
+                    {file.Diary_Number}
+                    <span className="font-semibold ml-2">Case:</span>&nbsp;
+                    {file.Case_Number}
                   </div>
                 </div>
 
                 {/* Case Name */}
                 <div className="mt-2">
-                  <span className="font-semibold">Case Name:</span> {file.Case_Name}
+                  <span className="font-semibold">Case Name:</span>{" "}
+                  {file.Case_Name}
                 </div>
 
                 {/* Branch & Date */}
                 <div className="mt-1 text-xs text-gray-700">
-                  <span className="font-semibold">Branch:</span> {file.Branch} |{' '}
-                  <span className="font-semibold">Diary Date:</span> {formatDateOnly(file.Institution_Date)}
+                  <span className="font-semibold">Branch:</span> {file.Branch} |{" "}
+                  <span className="font-semibold">Diary Date:</span>{" "}
+                  {formatDateOnly(file.Institution_Date)}
                 </div>
 
                 {/* Received */}
                 <div className="mt-1 text-xs text-gray-700">
-                  <span className="font-semibold">Received:</span> {formatDateTime(file.ServerDateTime)}
+                  <span className="font-semibold">Received:</span>{" "}
+                  {formatDateTime(file.ServerDateTime)}
                 </div>
               </div>
             ))}
@@ -195,61 +229,74 @@ function UserDashboard({ onLogout }) {
 
         {/* Charts */}
 
-<div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-  {['daily', 'weekly', 'monthly', 'yearly'].map((type) => {
-    const isPie = type === 'monthly' || type === 'yearly';
-    const data = groupBy(type);
-    const chartHeight = window.innerWidth < 640 ? 250 : 300; // reduce height on mobile
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+          {["daily", "weekly", "monthly", "yearly"].map((type) => {
+            const isPie = type === "monthly" || type === "yearly";
+            const data = groupBy(type);
+            const chartHeight = window.innerWidth < 640 ? 250 : 300; // reduce height on mobile
 
-    return (
-      <div key={type} className="p-4 border rounded shadow bg-white">
-        <h3 className="font-semibold mb-4 text-center capitalize text-lg text-gray-700">
-          {type === 'monthly' ? '📅' : type === 'yearly' ? '📈' : ''} {type} Uploads
-        </h3>
+            return (
+              <div key={type} className="p-4 border rounded shadow bg-white">
+                <h3 className="font-semibold mb-4 text-center capitalize text-lg text-gray-700">
+                  {type === "monthly" ? "📅" : type === "yearly" ? "📈" : ""}{" "}
+                  {type} Uploads
+                </h3>
 
-        <ResponsiveContainer width="100%" height={chartHeight}>
-          {isPie ? (
-            <PieChart>
-              <Tooltip formatter={(value) => [`${value} uploads`, 'Count']} />
-              <Pie
-                data={data}
-                dataKey="count"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={chartHeight / 3} // adjust radius for smaller height
-                label={({ name, percent, value }) =>
-                  `${name} (${value}, ${(percent * 100).toFixed(0)}%)`
-                }
-              >
-                {data.map((_, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={chartColors.pie[index % chartColors.pie.length]}
-                  />
-                ))}
-              </Pie>
-            </PieChart>
-          ) : (
-            <BarChart
-              data={data}
-              margin={{ top: 10, right: 10, left: 0, bottom: 30 }}
-              barSize={window.innerWidth < 640 ? 20 : 35}
-            >
-              <XAxis dataKey="name" angle={-30} textAnchor="end" height={50} />
-              <YAxis allowDecimals={false} />
-              <Tooltip formatter={(value) => [value, 'Uploads']} />
-              <Bar dataKey="count" fill={chartColors[type]} radius={[10, 10, 0, 0]}>
-                <LabelList dataKey="count" position="top" />
-              </Bar>
-            </BarChart>
-          )}
-        </ResponsiveContainer>
-      </div>
-    );
-  })}
-</div>
-
+                <ResponsiveContainer width="100%" height={chartHeight}>
+                  {isPie ? (
+                    <PieChart>
+                      <Tooltip
+                        formatter={(value) => [`${value} uploads`, "Count"]}
+                      />
+                      <Pie
+                        data={data}
+                        dataKey="count"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={chartHeight / 3} // adjust radius for smaller height
+                        label={({ name, percent, value }) =>
+                          `${name} (${value}, ${(percent * 100).toFixed(0)}%)`
+                        }
+                      >
+                        {data.map((_, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={
+                              chartColors.pie[index % chartColors.pie.length]
+                            }
+                          />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  ) : (
+                    <BarChart
+                      data={data}
+                      margin={{ top: 10, right: 10, left: 0, bottom: 30 }}
+                      barSize={window.innerWidth < 640 ? 20 : 35}
+                    >
+                      <XAxis
+                        dataKey="name"
+                        angle={-30}
+                        textAnchor="end"
+                        height={50}
+                      />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip formatter={(value) => [value, "Uploads"]} />
+                      <Bar
+                        dataKey="count"
+                        fill={chartColors[type]}
+                        radius={[10, 10, 0, 0]}
+                      >
+                        <LabelList dataKey="count" position="top" />
+                      </Bar>
+                    </BarChart>
+                  )}
+                </ResponsiveContainer>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </Layout>
   );

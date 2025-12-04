@@ -84,8 +84,10 @@ class Api {
     return res.data;
   }
 
-  async getUserFiles() {
-    const res = await this.axiosInstance.get("/file-movement/user-files");
+  async searchFileByDiaryOrCase(params = {}) {
+    const res = await this.axiosInstance.get("/file-movement/diary-search", {
+      params,
+    });
     return res.data;
   }
   async getMyFiles(params) {
