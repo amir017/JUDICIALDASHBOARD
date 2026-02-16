@@ -1,21 +1,7 @@
-// DashboardSinglePage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "./Layout";
 import Api from "../API/Api";
-
-// ✅ recharts
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Cell,
-  LabelList,
-} from "recharts";
 
 export default function DashboardSinglePage({ onLogout }) {
   const navigate = useNavigate();
@@ -27,6 +13,7 @@ export default function DashboardSinglePage({ onLogout }) {
   // RIGHT (district)
   const [districtTiles, setDistrictTiles] = useState([]);
   const [masterDistrictTiles, setMasterDistrictTiles] = useState([]);
+  const [overallDistrictTiles, setOverallDistrictTiles] = useState([]);
 
   const [loadingLeft, setLoadingLeft] = useState(true);
   const [loadingRight, setLoadingRight] = useState(true);
@@ -34,11 +21,9 @@ export default function DashboardSinglePage({ onLogout }) {
   const [selectedDesignation, setSelectedDesignation] = useState("ALL");
   const [selectedDistrict, setSelectedDistrict] = useState(null);
 
-  // District search + sort
   const [districtQuery, setDistrictQuery] = useState("");
   const [districtSort, setDistrictSort] = useState("az"); // stable default
 
-  // ---------------- helpers ----------------
   const toNumber = (val) => {
     if (val === null || val === undefined) return 0;
     if (typeof val === "number") return Number.isFinite(val) ? val : 0;
@@ -56,12 +41,7 @@ export default function DashboardSinglePage({ onLogout }) {
 
   const colorById = (id, palette) => palette[hashString(id) % palette.length];
 
-  const pretty = (n) => {
-    const x = Number(n) || 0;
-    return x.toLocaleString("en-US");
-  };
-
-  // ---------------- tile colors ----------------
+  // Designation colors
   const TILE_COLORS = [
     "bg-gradient-to-br from-sky-500/80 via-blue-600/80 to-indigo-700/80",
     "bg-gradient-to-br from-blue-600/80 via-indigo-700/80 to-indigo-900/80",
@@ -73,6 +53,7 @@ export default function DashboardSinglePage({ onLogout }) {
     "bg-gradient-to-br from-neutral-700/80 via-zinc-800/80 to-slate-900/80",
   ];
 
+  // District colors
   const DISTRICT_COLORS_36 = [
     "bg-gradient-to-br from-sky-400/80 via-blue-500/80 to-indigo-600/80 text-white",
     "bg-gradient-to-br from-blue-400/80 via-indigo-500/80 to-blue-600/80 text-white",
@@ -109,13 +90,15 @@ export default function DashboardSinglePage({ onLogout }) {
     "bg-gradient-to-br from-amber-400/70 via-orange-500/80 to-rose-600/80 text-white",
   ];
 
-  // ✅ stable district color map (by master list)
+  // Stable colors by master list
   const districtColorMap = useMemo(() => {
     const map = new Map();
     const used = new Set();
+
     for (const d of masterDistrictTiles) {
       const key = String(d.id ?? d.label ?? "");
       if (!key) continue;
+
       if (!map.has(key)) {
         const nextIndex = DISTRICT_COLORS_36.findIndex((_, i) => !used.has(i));
         const idx = nextIndex === -1 ? 0 : nextIndex;
@@ -129,7 +112,7 @@ export default function DashboardSinglePage({ onLogout }) {
   const TOTAL_COLOR =
     "bg-gradient-to-r from-slate-800 via-blue-900 to-indigo-900";
 
-  // ---------------- API fetchers ----------------
+  // ---------------- FETCHERS ----------------
   const fetchDesignationTiles = async () => {
     const data = await Api.getOverallCount();
     return (data || [])
@@ -152,6 +135,7 @@ export default function DashboardSinglePage({ onLogout }) {
 
   const fetchDistrictByDesignation = async (designationDesc) => {
     const data = await Api.getDistrictPostingCount(designationDesc);
+    // only need district name + count
     return (data || []).map((x) => ({
       label: x.DISTRICTNAME,
       count: toNumber(x.TOTAL ?? x.CNT ?? x.COUNT),
@@ -195,7 +179,7 @@ export default function DashboardSinglePage({ onLogout }) {
     return tiles.map(({ designationId, ...rest }) => rest);
   };
 
-  // ✅ keep district positions stable (master + counts)
+  // Keep district positions stable
   const applyDesignationToDistrictGrid = (countsList) => {
     const countsMap = new Map(
       (countsList || []).map((x) => [
@@ -212,14 +196,12 @@ export default function DashboardSinglePage({ onLogout }) {
     setDistrictTiles(stable);
   };
 
-  // ---------------- show all ----------------
+  // ---------------- SHOW ALL ----------------
   const showAll = () => {
     setSelectedDesignation("ALL");
     setSelectedDistrict(null);
-
     setDesignationTiles(baseDesignationTiles);
     setDistrictTiles(masterDistrictTiles);
-
     setDistrictQuery("");
     setDistrictSort("az");
   };
@@ -230,7 +212,7 @@ export default function DashboardSinglePage({ onLogout }) {
     districtQuery.trim() !== "" ||
     districtSort !== "az";
 
-  // ---------------- initial load (NO inner scroll; full page scroll) ----------------
+  // ---------------- INITIAL LOAD ----------------
   useEffect(() => {
     let mounted = true;
 
@@ -249,13 +231,13 @@ export default function DashboardSinglePage({ onLogout }) {
         setBaseDesignationTiles(d1);
         setDesignationTiles(d1);
 
-        // ✅ master stable A–Z district list
         const master = [...(d2 || [])].sort((a, b) =>
           String(a.label ?? "").localeCompare(String(b.label ?? ""), "en", {
             sensitivity: "base",
           }),
         );
 
+        setOverallDistrictTiles(d2);
         setMasterDistrictTiles(master);
         setDistrictTiles(master);
 
@@ -267,6 +249,7 @@ export default function DashboardSinglePage({ onLogout }) {
         if (!mounted) return;
         setDesignationTiles([]);
         setBaseDesignationTiles([]);
+        setOverallDistrictTiles([]);
         setMasterDistrictTiles([]);
         setDistrictTiles([]);
       } finally {
@@ -282,14 +265,13 @@ export default function DashboardSinglePage({ onLogout }) {
     };
   }, []);
 
-  // ---------------- clicks ----------------
+  // ---------------- CLICK: DESIGNATION (filters district counts) ----------------
   const onDesignationClick = async (labelOrAll) => {
-    setSelectedDistrict(null);
+    setSelectedDistrict(null); // designation mode clears district selection
     setDesignationTiles(baseDesignationTiles);
 
     setSelectedDesignation(labelOrAll);
     setLoadingRight(true);
-
     setDistrictQuery("");
     setDistrictSort("az");
 
@@ -298,7 +280,6 @@ export default function DashboardSinglePage({ onLogout }) {
         setDistrictTiles(masterDistrictTiles);
         return;
       }
-
       const list = await fetchDistrictByDesignation(labelOrAll);
       applyDesignationToDistrictGrid(list);
     } catch (e) {
@@ -309,6 +290,7 @@ export default function DashboardSinglePage({ onLogout }) {
     }
   };
 
+  // ---------------- CLICK: DISTRICT (filters designations) ----------------
   const onDistrictClick = async (districtName) => {
     if (!districtName) return;
 
@@ -331,17 +313,18 @@ export default function DashboardSinglePage({ onLogout }) {
     }
   };
 
-  // details navigation
+  // ✅ DETAILS NAV for designation tiles
   const goToDesignationDetails = (designationId, designationLabel) => {
     navigate("/dashboard/officer-detail", {
       state: {
         designationId: designationId ?? "ALL",
         designation: designationLabel ?? "ALL",
-        districtName: selectedDistrict ?? null,
+        districtName: selectedDistrict ?? null, // if district selected, pass it too
       },
     });
   };
 
+  // ✅ DETAILS NAV for district tiles (ONLY district)
   const goToDistrictDetails = (districtName) => {
     navigate("/dashboard/officer-detail", {
       state: {
@@ -352,7 +335,6 @@ export default function DashboardSinglePage({ onLogout }) {
     });
   };
 
-  // ---------------- totals + header ----------------
   const totalOverall = useMemo(() => {
     const sum = baseDesignationTiles.reduce((s, t) => s + toNumber(t.count), 0);
     return Number.isFinite(sum) ? sum : 0;
@@ -380,7 +362,6 @@ export default function DashboardSinglePage({ onLogout }) {
       ? totalOverall
       : totalRight;
 
-  // ---------------- district filter list ----------------
   const filteredDistricts = useMemo(() => {
     const q = districtQuery.trim().toLowerCase();
     let list = districtTiles;
@@ -408,120 +389,9 @@ export default function DashboardSinglePage({ onLogout }) {
     return sorted;
   }, [districtTiles, districtQuery, districtSort]);
 
-  // ---------------- GRAPH DATA (one chart only; depends on selection) ----------------
-  // If district selected -> chart shows designation-wise counts (sorted already)
-  // Else if designation selected -> chart shows district-wise counts (keep A–Z stable)
-  // Else -> chart shows overall district-wise (master)
-  const graphMode = selectedDistrict
-    ? "district_to_designation"
-    : selectedDesignation !== "ALL"
-      ? "designation_to_district"
-      : "overall_district";
-
-  const graphTitle = selectedDistrict
-    ? `Designation-wise in District: ${selectedDistrict}`
-    : selectedDesignation !== "ALL"
-      ? `District-wise for Designation: ${selectedDesignation}`
-      : "Overall District-wise";
-
-  const graphData = useMemo(() => {
-    if (selectedDistrict) {
-      // designationTiles already sorted by designationId from API method
-      return (designationTiles || []).map((t) => ({
-        name: String(t.label ?? ""),
-        value: toNumber(t.count),
-        key: String(t.id ?? t.label ?? ""),
-      }));
-    }
-
-    // designation selected OR overall => show district bars in stable A–Z order
-    const list = (districtTiles || []).map((t) => ({
-      name: String(t.label ?? ""),
-      value: toNumber(t.count),
-      key: String(t.id ?? t.label ?? ""),
-    }));
-
-    // keep stable A–Z for districts
-    list.sort((a, b) =>
-      String(a.name).localeCompare(String(b.name), "en", {
-        sensitivity: "base",
-      }),
-    );
-
-    return list;
-  }, [selectedDistrict, designationTiles, districtTiles]);
-
-  // chart min width => horizontal scroll shows ALL bars nicely
-  const chartMinWidth = useMemo(() => {
-    const n = graphData.length || 1;
-    // ~70px per bar + padding
-    return Math.max(900, n * 70);
-  }, [graphData]);
-
-  // bar color function:
-  // - if district selected => colorful by designation (stable)
-  // - else => colorful by district (stable)
-  const barColor = (i, d) => {
-    if (selectedDistrict) {
-      // designation palette (use TILE_COLORS-ish via inline CSS color fills)
-      // we'll map index to a set of nice hexes
-      const colors = [
-        "#0ea5e9",
-        "#2563eb",
-        "#06b6d4",
-        "#0f766e",
-        "#10b981",
-        "#22c55e",
-        "#64748b",
-        "#7c3aed",
-        "#db2777",
-        "#f97316",
-      ];
-      return colors[i % colors.length];
-    }
-
-    // district mode: stable color by district id -> choose a fixed palette
-    const colors = [
-      "#2563eb",
-      "#0ea5e9",
-      "#06b6d4",
-      "#14b8a6",
-      "#22c55e",
-      "#84cc16",
-      "#f59e0b",
-      "#f97316",
-      "#ec4899",
-      "#8b5cf6",
-      "#64748b",
-      "#0f172a",
-    ];
-
-    const key = String(d?.key ?? d?.name ?? i);
-    return colors[hashString(key) % colors.length];
-  };
-
-  const FancyTooltip = ({ active, payload, label }) => {
-    if (!active || !payload?.length) return null;
-    const v = payload[0]?.value ?? 0;
-
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-xl px-3 py-2">
-        <div className="text-[11px] text-slate-500 font-bold tracking-wide">
-          {graphMode === "district_to_designation" ? "DESIGNATION" : "DISTRICT"}
-        </div>
-        <div className="font-extrabold text-slate-900">{label}</div>
-        <div className="mt-1 text-sm font-extrabold text-indigo-700">
-          {pretty(v)}
-        </div>
-      </div>
-    );
-  };
-
-  // ---------------- render ----------------
   return (
     <Layout onLogout={onLogout}>
-      {/* ✅ FULL PAGE SCROLL (no inner scroll) */}
-      <div className="bg-slate-50 px-4 py-3 min-h-[calc(100vh-88px)] overflow-y-auto">
+      <div className="bg-slate-50 px-4 py-3 h-[calc(100vh-88px)] overflow-hidden">
         {/* Total bar */}
         <div
           className={`${TOTAL_COLOR} rounded-2xl text-white shadow-xl mb-3 border border-white/10`}
@@ -547,10 +417,9 @@ export default function DashboardSinglePage({ onLogout }) {
           </div>
         </div>
 
-        {/* ✅ GRID (no inner scroll; full content shows; page scroll handles height) */}
-        <div className="grid grid-cols-12 gap-4">
+        <div className="grid grid-cols-12 gap-4 h-[calc(100%-86px)]">
           {/* LEFT */}
-          <div className="col-span-12 xl:col-span-4 bg-white/80 backdrop-blur border border-slate-200/60 rounded-2xl p-4 shadow-sm">
+          <div className="col-span-12 xl:col-span-4 bg-white/80 backdrop-blur border border-slate-200/60 rounded-2xl p-4 flex flex-col min-h-0 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <div className="leading-tight">
                 <div className="text-lg font-extrabold text-slate-800 tracking-tight">
@@ -559,7 +428,8 @@ export default function DashboardSinglePage({ onLogout }) {
                     : "Designation-wise"}
                 </div>
                 <div className="text-[11px] text-slate-500 -mt-0.5">
-                  Click tile = filter | Details = officer list
+                  Click tile = filter district/designation | Details = officer
+                  list
                 </div>
               </div>
 
@@ -568,88 +438,82 @@ export default function DashboardSinglePage({ onLogout }) {
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              {/* ALL tile */}
-              <div
-                className={`bg-gradient-to-br from-slate-800 via-blue-900 to-indigo-900 rounded-2xl p-4 text-white font-extrabold
-                  ${selectedDesignation === "ALL" && !selectedDistrict ? "ring-4 ring-white/35" : ""}`}
-              >
+            <div className="flex-1 overflow-auto pr-1 min-h-0">
+              <div className="grid grid-cols-2 gap-4">
+                {/* ALL tile */}
                 <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onDesignationClick("ALL")}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ")
-                      onDesignationClick("ALL");
-                  }}
-                  className="cursor-pointer text-center"
+                  className={`bg-gradient-to-br from-slate-800 via-blue-900 to-indigo-900 rounded-2xl p-4 text-white font-extrabold
+                    ${selectedDesignation === "ALL" && !selectedDistrict ? "ring-4 ring-white/35" : ""}`}
                 >
-                  <div className="text-xs uppercase tracking-wide opacity-95">
-                    ALL
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onDesignationClick("ALL")}
+                    className="cursor-pointer text-center"
+                  >
+                    <div className="text-xs uppercase tracking-wide opacity-95">
+                      ALL
+                    </div>
+                    <div className="text-3xl mt-2 leading-none">
+                      {loadingLeft
+                        ? 0
+                        : selectedDistrict
+                          ? totalLeft
+                          : totalOverall}
+                    </div>
                   </div>
-                  <div className="text-3xl mt-2 leading-none">
-                    {loadingLeft
-                      ? 0
-                      : selectedDistrict
-                        ? totalLeft
-                        : totalOverall}
-                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => goToDesignationDetails("ALL", "ALL")}
+                    className="mt-3 w-full rounded-xl bg-white/15 text-white text-xs py-2 font-bold hover:bg-white/20 transition"
+                  >
+                    Details
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => goToDesignationDetails("ALL", "ALL")}
-                  className="mt-3 w-full rounded-xl bg-white/15 text-white text-xs py-2 font-bold hover:bg-white/20 transition"
-                >
-                  Details
-                </button>
-              </div>
+                {/* Designation tiles */}
+                {designationTiles.map((t, idx) => {
+                  const key = t.id ?? t.label ?? idx;
+                  const bg = colorById(key, TILE_COLORS);
 
-              {/* Designation tiles */}
-              {designationTiles.map((t, idx) => {
-                const key = t.id ?? t.label ?? idx;
-                const bg = colorById(key, TILE_COLORS);
-
-                return (
-                  <div
-                    key={key}
-                    className={`${bg} rounded-2xl p-4 text-white font-extrabold`}
-                  >
+                  return (
                     <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => onDesignationClick(t.label ?? "")}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ")
-                          onDesignationClick(t.label ?? "");
-                      }}
-                      className="cursor-pointer text-center"
+                      key={key}
+                      className={`${bg} rounded-2xl p-4 text-white font-extrabold`}
                     >
-                      <div className="text-xs uppercase tracking-wide opacity-95 line-clamp-2">
-                        {t.label || "Unknown"}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onDesignationClick(t.label ?? "")}
+                        className="cursor-pointer text-center"
+                      >
+                        <div className="text-xs uppercase tracking-wide opacity-95 line-clamp-2">
+                          {t.label || "Unknown"}
+                        </div>
+                        <div className="text-3xl mt-2 leading-none">
+                          {t.count}
+                        </div>
                       </div>
-                      <div className="text-3xl mt-2 leading-none">
-                        {t.count}
-                      </div>
-                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        goToDesignationDetails(t.id ?? "ALL", t.label ?? "")
-                      }
-                      className="mt-3 w-full rounded-xl bg-white/15 text-white text-xs py-2 font-bold hover:bg-white/20 transition"
-                    >
-                      Details
-                    </button>
-                  </div>
-                );
-              })}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          goToDesignationDetails(t.id ?? "ALL", t.label ?? "")
+                        }
+                        className="mt-3 w-full rounded-xl bg-white/15 text-white text-xs py-2 font-bold hover:bg-white/20 transition"
+                      >
+                        Details
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
           {/* RIGHT */}
-          <div className="col-span-12 xl:col-span-8 bg-white/80 backdrop-blur border border-slate-200/60 rounded-2xl p-4 shadow-sm">
+          <div className="col-span-12 xl:col-span-8 bg-white/80 backdrop-blur border border-slate-200/60 rounded-2xl p-4 flex flex-col min-h-0 shadow-sm">
             <div className="flex items-center justify-between gap-3 mb-3">
               <div className="leading-tight">
                 <div className="font-extrabold text-slate-800">
@@ -687,62 +551,63 @@ export default function DashboardSinglePage({ onLogout }) {
                 : `${filteredDistricts.length} / ${districtTiles.length} districts`}
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-4">
-              {filteredDistricts.map((t, idx) => {
-                const key = t.id ?? t.label ?? idx;
-                const bg =
-                  districtColorMap.get(String(key)) || DISTRICT_COLORS_36[0];
-                const isActive = selectedDistrict === t.label;
+            <div className="flex-1 overflow-auto pr-1 min-h-0">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-4">
+                {filteredDistricts.map((t, idx) => {
+                  const key = t.id ?? t.label ?? idx;
+                  const bg =
+                    districtColorMap.get(String(key)) || DISTRICT_COLORS_36[0];
+                  const isActive = selectedDistrict === t.label;
 
-                return (
-                  <div
-                    key={key}
-                    className={`${bg} rounded-2xl p-4 font-extrabold
-                      hover:ring-2 hover:ring-slate-200 transition-all duration-200
-                      ${isActive ? "ring-4 ring-white/35" : ""}`}
-                    title={t.label}
-                  >
+                  return (
                     <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => onDistrictClick(t.label)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ")
-                          onDistrictClick(t.label);
-                      }}
-                      className="cursor-pointer text-center"
+                      key={key}
+                      className={`${bg} rounded-2xl p-4 font-extrabold
+                        hover:ring-2 hover:ring-slate-200 transition-all duration-200
+                        ${isActive ? "ring-4 ring-white/35" : ""}`}
+                      title={t.label}
                     >
-                      <div className="text-xs uppercase tracking-wide opacity-90 line-clamp-1">
-                        {t.label || "Unknown"}
+                      {/* tile click -> filter designations */}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onDistrictClick(t.label)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ")
+                            onDistrictClick(t.label);
+                        }}
+                        className="cursor-pointer text-center"
+                      >
+                        <div className="text-xs uppercase tracking-wide opacity-90 line-clamp-1">
+                          {t.label || "Unknown"}
+                        </div>
+                        <div className="text-3xl mt-2 leading-none">
+                          {t.count}
+                        </div>
                       </div>
-                      <div className="text-3xl mt-2 leading-none">
-                        {t.count}
-                      </div>
+
+                      {/* ✅ NEW: District Details button */}
+                      <button
+                        type="button"
+                        onClick={() => goToDistrictDetails(t.label)}
+                        className="mt-3 w-full rounded-xl bg-white/15 text-white text-xs py-2 font-bold hover:bg-white/20 transition"
+                        title="Open officer detail list for this district"
+                      >
+                        Details
+                      </button>
                     </div>
+                  );
+                })}
 
-                    <button
-                      type="button"
-                      onClick={() => goToDistrictDetails(t.label)}
-                      className="mt-3 w-full rounded-xl bg-white/15 text-white text-xs py-2 font-bold hover:bg-white/20 transition"
-                      title="Open officer detail list for this district"
-                    >
-                      Details
-                    </button>
+                {!loadingRight && filteredDistricts.length === 0 && (
+                  <div className="col-span-full text-center text-slate-500 py-10">
+                    No data found.
                   </div>
-                );
-              })}
-
-              {!loadingRight && filteredDistricts.length === 0 && (
-                <div className="col-span-full text-center text-slate-500 py-10">
-                  No data found.
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
-
-        {/* bottom spacing */}
-        <div className="h-4" />
       </div>
     </Layout>
   );

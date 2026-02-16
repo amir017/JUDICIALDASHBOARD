@@ -19,7 +19,7 @@ class Api {
         }
         return config;
       },
-      (error) => Promise.reject(error)
+      (error) => Promise.reject(error),
     );
 
     this.axiosInstance.interceptors.response.use(
@@ -31,7 +31,7 @@ class Api {
           window.location.href = "/login";
         }
         return Promise.reject(error);
-      }
+      },
     );
   }
 
@@ -54,6 +54,10 @@ class Api {
 
   async getMenus() {
     const res = await this.axiosInstance.get("/auth/menus");
+    return res.data;
+  }
+  async getMenuserp() {
+    const res = await this.axiosInstance.get("/auth/menuserp");
     return res.data;
   }
 
@@ -92,6 +96,70 @@ class Api {
   }
   async getMyFiles(params) {
     const res = await this.axiosInstance.get("/file-movement/myfiles");
+    return res.data;
+  }
+  async getOverallCount() {
+    const res = await this.axiosInstance.get("/dj/getDesignationCount");
+    return res.data;
+  }
+  async getDistrictPostingCount(designation) {
+    const res = await this.axiosInstance.get("/dj/getDistrictPostingCount", {
+      params: { designation },
+    });
+    return res.data;
+  }
+  async getDistrictPostingCountoverAll() {
+    const res = await this.axiosInstance.get(
+      "/dj/getDistrictPostingCountoverAll",
+    );
+    return res.data;
+  }
+  async getOfficerPostingDetail({
+    designationId = "ALL",
+    districtName = null,
+  } = {}) {
+    const res = await this.axiosInstance.get("/dj/getOfficerPostingDetail", {
+      params: { designationId, districtName },
+    });
+    return res.data;
+  }
+  async getDesignationWiseCountWithDistrictFilter(districtName) {
+    const res = await this.axiosInstance.get(
+      "/dj/getDesignationWiseCountWithDistrictFilter",
+      { params: { districtName } },
+    );
+    return res.data;
+  }
+  async getOfficerProfile({ officerId }) {
+    const res = await this.axiosInstance.get("/dj/getOfficerProfile", {
+      params: { officerId },
+    });
+    return res.data;
+  }
+  async getOfficerPostingHistory({ officerId }) {
+    console.log("officerId ", officerId);
+    const res = await this.axiosInstance.get("/dj/getOfficerPostingHistory", {
+      params: { officerId },
+    });
+    return res.data;
+  }
+  async getOfficerQualifications({ officerId }) {
+    const res = await this.axiosInstance.get("/dj/getOfficerQualifications", {
+      params: { officerId },
+    });
+    return res.data;
+  }
+  async getOfficerLeaves({ officerId }) {
+    const res = await this.axiosInstance.get("/dj/getOfficerLeaves", {
+      params: { officerId },
+    });
+    return res.data;
+  }
+
+  async getOfficerLeavesYearly({ officerId }) {
+    const res = await this.axiosInstance.get("/dj/getOfficerLeavesYearly", {
+      params: { officerId },
+    });
     return res.data;
   }
 }

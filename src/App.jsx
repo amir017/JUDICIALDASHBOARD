@@ -7,15 +7,19 @@ import {
 import { useState } from "react";
 
 import Login from "./components/Login";
-
 import DiarySearchScreen from "./components/DiarySearchScreenQR";
 import UserDashboard from "./components/UserDashboard";
 import DiaryTracking from "./components/DiaryTracking";
 import MyFiles from "./components/MyFiles";
+import OfficerProfilePage from "./components/OfficerProfilePage";
+import DesignationDistricts from "./components/DesignationDistricts";
+
+// ✅ NEW: officer detail page
+import OfficerDetailPage from "./components/OfficerDetailPage";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
-    !!localStorage.getItem("token")
+    !!localStorage.getItem("token"),
   );
 
   const handleLogin = () => {
@@ -35,6 +39,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login onLogin={handleLogin} />} />
+
         <Route
           path="/DiarySearchScreenQR"
           element={
@@ -43,6 +48,7 @@ function App() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/UserDashboard"
           element={
@@ -51,6 +57,7 @@ function App() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/diaryTracking"
           element={
@@ -59,6 +66,7 @@ function App() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/myFiles"
           element={
@@ -68,6 +76,33 @@ function App() {
           }
         />
 
+        <Route
+          path="/dashboard/designation-districts"
+          element={
+            <ProtectedRoute>
+              <DesignationDistricts onLogout={handleLogout} />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ✅ NEW ROUTE */}
+        <Route
+          path="/dashboard/officer-detail"
+          element={
+            <ProtectedRoute>
+              <OfficerDetailPage onLogout={handleLogout} />
+            </ProtectedRoute>
+          }
+        />
+        {/* ✅ NEW: Officer Profile Route */}
+        <Route
+          path="/dashboard/officer-profile"
+          element={
+            <ProtectedRoute>
+              <OfficerProfilePage onLogout={handleLogout} />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/" element={<Navigate to="/login" />} />
       </Routes>
     </Router>
