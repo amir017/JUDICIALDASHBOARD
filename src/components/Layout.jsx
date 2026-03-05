@@ -143,7 +143,8 @@ export default function Layout({ children, onLogout }) {
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
       {/* ---------- Header ---------- */}
-      <header className="sticky top-4 z-50 mx-auto w-[96%] relative">
+      {/* ✅ CHANGED: top-4 -> top-0 (removes gap above header) */}
+      <header className="sticky top-0 z-50 mx-auto w-[96%] relative">
         {/* Gradient background with overlay for readability */}
         <div
           className="
@@ -188,9 +189,7 @@ export default function Layout({ children, onLogout }) {
               <h1 className="block md:hidden text-white font-extrabold text-lg tracking-tight drop-shadow-md">
                 IJPMS
               </h1>
-              <p className="text-white/90 text-xs drop-shadow-sm">
-                {/* You can keep this empty or add a tagline */}
-              </p>
+              <p className="text-white/90 text-xs drop-shadow-sm"></p>
             </div>
           </div>
 
@@ -288,7 +287,8 @@ export default function Layout({ children, onLogout }) {
       </header>
 
       {/* ---------- Main content ---------- */}
-      <main className="flex-grow p-6 mt-6">{children}</main>
+      {/* ✅ CHANGED: removed mt-6 and removed top padding */}
+      <main className="flex-grow px-6 pb-6 pt-0 mt-0">{children}</main>
 
       {/* ---------- Animations ---------- */}
       <style>{`

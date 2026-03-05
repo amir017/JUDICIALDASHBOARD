@@ -1,15 +1,7 @@
+// OfficerProfilePage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import {
-  MapPin,
-  Calendar,
-  IdCard,
-  Phone,
-  Home,
-  Briefcase,
-  Building2,
-  UserCheck,
-} from "lucide-react";
+import { MapPin, Calendar, IdCard, Phone, Home } from "lucide-react";
 import Layout from "./Layout";
 import Api from "../API/Api";
 
@@ -45,9 +37,6 @@ const toDDMMYYYY = (val) => {
 
   return s;
 };
-
-const isLikelyDateKey = (key) =>
-  /date|dob|doj|posting/i.test(String(key || ""));
 
 const parseDateSafe = (val) => {
   if (!val) return null;
@@ -86,7 +75,7 @@ const fmtYMDLong = (totalDays) => {
   return `${years}y ${months}m ${days}d`;
 };
 
-/* --------------------- sanitize text so never blank/blank --------------------- */
+/* --------------------- sanitize text so never blank --------------------- */
 const safeText = (v) => {
   if (v === null || v === undefined) return "—";
   const s = String(v).replace(/\s+/g, " ").trim();
@@ -285,7 +274,7 @@ const SummaryPills = ({ CNIC, CELL, POSTING }) => (
   </div>
 );
 
-/* --------------------------- normalize + sort ----------------------------- */
+/* --------------------------- normalize + sort (posting) ----------------------------- */
 const getNotifNo = (r) =>
   r.NOTIFICATION_NO ||
   r.NOTIFICATIONNO ||
@@ -576,7 +565,6 @@ const GraphBars = ({ items }) => {
             6,
             Math.round(((r._durationDays || 0) / maxDays) * 100),
           );
-
           return (
             <div
               key={`bar-${idx}`}
@@ -735,6 +723,442 @@ const HistoryCard = ({ loading, rows }) => {
   );
 };
 
+/* ============================= Qualifications ============================= */
+/* Oracle often returns UPPERCASE keys, so read both */
+const getQuaType = (r) => r?.qua_type ?? r?.QUA_TYPE;
+const getQuaDesc = (r) => r?.qua_desc ?? r?.QUA_DESC;
+const getNameIns = (r) => r?.name_ins ?? r?.NAME_INS;
+const getFromDate = (r) => r?.from_date ?? r?.FROM_DATE;
+const getToDate = (r) => r?.to_date ?? r?.TO_DATE;
+const getRemarks = (r) => r?.remarks ?? r?.REMARKS;
+const getPassYear = (r) => r?.pass_year ?? r?.PASS_YEAR;
+const getGrade = (r) => r?.grade ?? r?.GRADE;
+
+const quaTypeLabel = (t) => {
+  const n = Number(t);
+  if (n === 0) return "Academic";
+  if (n === 1) return "Professional";
+  if (n === 2) return "Other";
+  return "—";
+};
+
+/* colorful + ellipsis education pill */
+const EduPill = ({ text }) => {
+  const t = safeText(text);
+  return (
+    <div
+      title={t}
+      className={[
+        "max-w-full inline-flex items-center",
+        "px-3 py-1.5 rounded-2xl",
+        "bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600",
+        "text-white text-[12px] font-black shadow-sm",
+        "border border-white/20",
+      ].join(" ")}
+    >
+      <span className="max-w-[520px] truncate">{t}</span>
+    </div>
+  );
+};
+
+const QualificationsCard = ({ loading, rows }) => {
+  const grouped = useMemo(() => {
+    const list = [...(rows || [])];
+    list.sort(
+      (a, b) => Number(getPassYear(b) || 0) - Number(getPassYear(a) || 0),
+    );
+
+    return list.reduce(
+      (acc, r) => {
+        const k = quaTypeLabel(getQuaType(r));
+        acc[k] = acc[k] || [];
+        acc[k].push(r);
+        return acc;
+      },
+      { Academic: [], Professional: [], Other: [], "—": [] },
+    );
+  }, [rows]);
+
+  return (
+    <div className="rounded-3xl border border-slate-200/70 bg-white/80 backdrop-blur shadow-sm overflow-hidden">
+      <div className="p-4 bg-gradient-to-r from-emerald-700 via-teal-600 to-sky-600 text-white">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[16px] font-black">Qualifications</div>
+            <div className="text-[11px] font-bold text-white/90">
+              Academic • Professional • Other
+            </div>
+          </div>
+
+          <span className="px-3 py-1 rounded-full text-[11px] font-extrabold bg-white/15 border border-white/25">
+            {rows?.length || 0} Records
+          </span>
+        </div>
+      </div>
+
+      <div className="p-4">
+        {loading ? (
+          <div className="py-10 text-center text-slate-500 font-bold">
+            Loading qualifications...
+          </div>
+        ) : !rows?.length ? (
+          <div className="py-10 text-center text-slate-500 font-bold">
+            No qualifications found.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {["Academic", "Professional", "Other", "—"].map((k) => {
+              const items = grouped[k] || [];
+              if (!items.length) return null;
+
+              return (
+                <div
+                  key={k}
+                  className="rounded-3xl border border-slate-200/70 bg-white/70 overflow-hidden"
+                >
+                  <div className="px-4 py-2.5 border-b border-slate-200/60 bg-gradient-to-r from-slate-50 to-sky-50 flex items-center justify-between">
+                    <div className="text-[12px] font-black text-slate-900">
+                      {k}
+                    </div>
+                    <span className="px-3 py-1 rounded-full text-[11px] font-black bg-white border border-slate-200 text-slate-800">
+                      {items.length}
+                    </span>
+                  </div>
+
+                  <div className="p-3 space-y-2">
+                    {items.map((r, idx) => {
+                      const type = quaTypeLabel(getQuaType(r));
+                      const typeCls =
+                        type === "Academic"
+                          ? "bg-emerald-600"
+                          : type === "Professional"
+                            ? "bg-indigo-600"
+                            : type === "Other"
+                              ? "bg-amber-600"
+                              : "bg-slate-700";
+
+                      return (
+                        <div
+                          key={`${k}-${idx}`}
+                          className="rounded-2xl border border-slate-200/70 bg-white/85 px-3 py-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              {/* Education (colorful + ellipsis) + Institute (ellipsis) */}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <EduPill text={getQuaDesc(r)} />
+
+                                <div
+                                  title={safeText(getNameIns(r))}
+                                  className="px-3 py-1.5 rounded-2xl bg-sky-50 border border-sky-200 text-slate-900 text-[12px] font-black max-w-full"
+                                >
+                                  <span className="max-w-[520px] truncate inline-block">
+                                    {safeText(getNameIns(r))}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                <Chip>
+                                  From:{" "}
+                                  {getFromDate(r)
+                                    ? toDDMMYYYY(getFromDate(r))
+                                    : "—"}
+                                </Chip>
+                                <Chip>
+                                  To:{" "}
+                                  {getToDate(r)
+                                    ? toDDMMYYYY(getToDate(r))
+                                    : "—"}
+                                </Chip>
+                                <Chip>
+                                  Pass Year: {safeText(getPassYear(r))}
+                                </Chip>
+                                <Chip>Grade: {safeText(getGrade(r))}</Chip>
+                              </div>
+
+                              {safeText(getRemarks(r)) !== "—" && (
+                                <div className="mt-2 text-[11.5px] font-bold text-slate-700">
+                                  Remarks:{" "}
+                                  <span className="font-extrabold text-slate-900">
+                                    {safeText(getRemarks(r))}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            <span
+                              className={`shrink-0 px-2.5 py-1 rounded-full text-[10.5px] font-black text-white ${typeCls}`}
+                            >
+                              {type}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* =============================== Leaves =============================== */
+const getLeaveType = (r) => r?.leave_type ?? r?.LEAVE_TYPE;
+const getLeaveTypeDesc = (r) => r?.leave_type_desc ?? r?.LEAVE_TYPE_DESC;
+const getLeaveFrom = (r) => r?.from_date ?? r?.FROM_DATE;
+const getLeaveTo = (r) => r?.to_date ?? r?.TO_DATE;
+const getLeaveRemarks = (r) => r?.remarks ?? r?.REMARKS;
+
+const leaveTypeLabel = (t) => {
+  const n = Number(t);
+  if (n === 0) return "Casual Leave";
+  if (n === 1) return "Earned Leave";
+  if (n === 2) return "Special Leave";
+  if (n === 3) return "Extra-Ordinary Leave";
+  if (n === 4) return "Ex-Pakistan Leave";
+  if (n === 5) return "Paternity Leave";
+  if (n === 6) return "Maternity Leave";
+  return "Unknown";
+};
+
+const leaveDays = (r) => {
+  const f = parseDateSafe(getLeaveFrom(r));
+  const t = parseDateSafe(getLeaveTo(r)) || new Date();
+  if (!f) return 0;
+  return Math.max(1, daysBetween(f, t) + 1);
+};
+
+const LeavesCard = ({ loading, rows }) => {
+  const items = useMemo(() => {
+    const list = [...(rows || [])];
+    list.sort(
+      (a, b) =>
+        (parseDateSafe(getLeaveFrom(b))?.getTime?.() || 0) -
+        (parseDateSafe(getLeaveFrom(a))?.getTime?.() || 0),
+    );
+    return list;
+  }, [rows]);
+
+  return (
+    <div className="rounded-3xl border border-slate-200/70 bg-white/80 backdrop-blur shadow-sm overflow-hidden">
+      <div className="p-4 bg-gradient-to-r from-emerald-700 via-teal-600 to-sky-600 text-white">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[16px] font-black">Leaves</div>
+            <div className="text-[11px] font-bold text-white/90">
+              Leave records (latest first)
+            </div>
+          </div>
+          <span className="px-3 py-1 rounded-full text-[11px] font-extrabold bg-white/15 border border-white/25">
+            {rows?.length || 0} Records
+          </span>
+        </div>
+      </div>
+
+      <div className="p-4">
+        {loading ? (
+          <div className="py-10 text-center text-slate-500 font-bold">
+            Loading leaves...
+          </div>
+        ) : !items.length ? (
+          <div className="py-10 text-center text-slate-500 font-bold">
+            No leaves found.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {items.map((r, idx) => {
+              const t = getLeaveType(r);
+              const label = getLeaveTypeDesc(r) || leaveTypeLabel(t);
+              const f = getLeaveFrom(r);
+              const to = getLeaveTo(r);
+              const d = leaveDays(r);
+
+              const pillCls =
+                Number(t) === 0
+                  ? "bg-emerald-600"
+                  : Number(t) === 1
+                    ? "bg-indigo-600"
+                    : Number(t) === 2
+                      ? "bg-sky-600"
+                      : Number(t) === 3
+                        ? "bg-rose-600"
+                        : Number(t) === 4
+                          ? "bg-amber-600"
+                          : Number(t) === 5
+                            ? "bg-violet-600"
+                            : Number(t) === 6
+                              ? "bg-pink-600"
+                              : "bg-slate-700";
+
+              return (
+                <div
+                  key={`lv-${idx}`}
+                  className="rounded-2xl border border-slate-200/70 bg-white/85 px-3 py-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`px-3 py-1 rounded-full text-[11px] font-black text-white ${pillCls}`}
+                        >
+                          {label}
+                        </span>
+
+                        <span className="px-3 py-1 rounded-full text-[11px] font-black bg-slate-900 text-white">
+                          {d} days
+                        </span>
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <Chip>From: {f ? toDDMMYYYY(f) : "—"}</Chip>
+                        <Chip>To: {to ? toDDMMYYYY(to) : "—"}</Chip>
+                      </div>
+
+                      {safeText(getLeaveRemarks(r)) !== "—" && (
+                        <div className="mt-2 text-[11.5px] font-bold text-slate-700">
+                          Remarks:{" "}
+                          <span className="font-extrabold text-slate-900">
+                            {safeText(getLeaveRemarks(r))}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const LeavesYearlyCard = ({ loading, rows }) => {
+  const grouped = useMemo(() => {
+    const list = [...(rows || [])];
+
+    const getYr = (r) => r?.yr ?? r?.YR;
+    const getCnt = (r) => r?.cnt ?? r?.CNT;
+    const getDays = (r) => r?.total_days ?? r?.TOTAL_DAYS;
+
+    const byYear = {};
+    for (const r of list) {
+      const y = String(getYr(r) ?? "—");
+      byYear[y] = byYear[y] || {
+        year: y,
+        totalDays: 0,
+        totalCnt: 0,
+        items: [],
+      };
+
+      const cnt = Number(getCnt(r) || 0);
+      const days = Number(getDays(r) || 0);
+
+      byYear[y].items.push(r);
+      byYear[y].totalCnt += cnt;
+      byYear[y].totalDays += days;
+    }
+
+    return Object.values(byYear).sort((a, b) => {
+      if (a.year === "—") return 1;
+      if (b.year === "—") return -1;
+      return Number(b.year) - Number(a.year);
+    });
+  }, [rows]);
+
+  return (
+    <div className="rounded-3xl border border-slate-200/70 bg-white/80 backdrop-blur shadow-sm overflow-hidden">
+      <div className="p-4 bg-gradient-to-r from-emerald-700 via-teal-600 to-sky-600 text-white">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[16px] font-black">Leaves (Year-wise)</div>
+            <div className="text-[11px] font-bold text-white/90">
+              Summary by year and leave type
+            </div>
+          </div>
+          <span className="px-3 py-1 rounded-full text-[11px] font-extrabold bg-white/15 border border-white/25">
+            {rows?.length || 0} Rows
+          </span>
+        </div>
+      </div>
+
+      <div className="p-4">
+        {loading ? (
+          <div className="py-10 text-center text-slate-500 font-bold">
+            Loading yearly summary...
+          </div>
+        ) : !grouped.length ? (
+          <div className="py-10 text-center text-slate-500 font-bold">
+            No summary found.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {grouped.map((y) => (
+              <div
+                key={`yr-${y.year}`}
+                className="rounded-3xl border border-slate-200/70 bg-white/70 overflow-hidden"
+              >
+                <div className="px-4 py-2.5 border-b border-slate-200/60 bg-gradient-to-r from-slate-50 to-sky-50 flex items-center justify-between">
+                  <div className="text-[12px] font-black text-slate-900">
+                    {y.year}
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="px-3 py-1 rounded-full text-[11px] font-black bg-white border border-slate-200 text-slate-800">
+                      {y.totalCnt} leaves
+                    </span>
+                    <span className="px-3 py-1 rounded-full text-[11px] font-black bg-slate-900 text-white">
+                      {Math.round(y.totalDays)} days
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3 space-y-2">
+                  {y.items.map((r, idx) => {
+                    const label =
+                      (r?.leave_type_desc ?? r?.LEAVE_TYPE_DESC) ||
+                      leaveTypeLabel(getLeaveType(r));
+                    const cnt = Number(r?.cnt ?? r?.CNT ?? 0);
+                    const days = Number(r?.total_days ?? r?.TOTAL_DAYS ?? 0);
+
+                    return (
+                      <div
+                        key={`row-${y.year}-${idx}`}
+                        className="rounded-2xl border border-slate-200/70 bg-white/85 px-3 py-2.5"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-[12px] font-black text-slate-950 truncate">
+                              {label}
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              <Chip>Count: {cnt}</Chip>
+                              <Chip>Total Days: {Math.round(days)}</Chip>
+                            </div>
+                          </div>
+
+                          <span className="px-3 py-1 rounded-full text-[11px] font-black bg-slate-900 text-white">
+                            {Math.round(days)}d
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 /* ------------------------------------------------------------------------- */
 export default function OfficerProfilePage({ onLogout }) {
   const navigate = useNavigate();
@@ -742,9 +1166,22 @@ export default function OfficerProfilePage({ onLogout }) {
   const officerId = location.state?.officerId;
 
   const [profile, setProfile] = useState(null);
+
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyRows, setHistoryRows] = useState([]);
 
+  const [qualLoading, setQualLoading] = useState(true);
+  const [qualRows, setQualRows] = useState([]);
+
+  const [leaveLoading, setLeaveLoading] = useState(true);
+  const [leaveRows, setLeaveRows] = useState([]);
+
+  const [leaveYearLoading, setLeaveYearLoading] = useState(true);
+  const [leaveYearRows, setLeaveYearRows] = useState([]);
+
+  const [activeTab, setActiveTab] = useState("posting"); // posting | qual | leaves
+
+  // posting history
   useEffect(() => {
     let mounted = true;
 
@@ -772,6 +1209,91 @@ export default function OfficerProfilePage({ onLogout }) {
     };
   }, [officerId]);
 
+  // qualifications
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        setQualLoading(true);
+        if (!officerId) {
+          setQualRows([]);
+          return;
+        }
+        const rows = await Api.getOfficerQualifications({ officerId });
+        if (!mounted) return;
+        setQualRows(rows || []);
+      } catch (e) {
+        console.error("OfficerProfilePage qualifications load error:", e);
+        if (!mounted) return;
+        setQualRows([]);
+      } finally {
+        if (mounted) setQualLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [officerId]);
+
+  // leaves list
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        setLeaveLoading(true);
+        if (!officerId) {
+          setLeaveRows([]);
+          return;
+        }
+        const rows = await Api.getOfficerLeaves({ officerId });
+        if (!mounted) return;
+        setLeaveRows(rows || []);
+      } catch (e) {
+        console.error("OfficerProfilePage leaves load error:", e);
+        if (!mounted) return;
+        setLeaveRows([]);
+      } finally {
+        if (mounted) setLeaveLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [officerId]);
+
+  // leaves yearly
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        setLeaveYearLoading(true);
+        if (!officerId) {
+          setLeaveYearRows([]);
+          return;
+        }
+        const rows = await Api.getOfficerLeavesYearly({ officerId });
+        if (!mounted) return;
+        setLeaveYearRows(rows || []);
+      } catch (e) {
+        console.error("OfficerProfilePage leaves-yearly load error:", e);
+        if (!mounted) return;
+        setLeaveYearRows([]);
+      } finally {
+        if (mounted) setLeaveYearLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [officerId]);
+
+  // profile
   useEffect(() => {
     let mounted = true;
 
@@ -798,9 +1320,19 @@ export default function OfficerProfilePage({ onLogout }) {
 
   const pictureSrc = useMemo(() => {
     if (!profile) return null;
+
     const b64 = profile.PHOTO_BASE64 || profile.PHOTOBASE64;
-    const mime = profile.PHOTO_MIME || "image/jpeg";
-    if (b64 && String(b64).trim()) return `data:${mime};base64,${b64}`;
+    const mime = profile.PHOTO_MIME; // don’t default here
+
+    if (b64 && String(b64).trim()) {
+      // If it’s TIFF, most browsers will not render it
+      if (mime === "image/tiff") return null;
+
+      // If mime missing, try a safe default, but better to fix backend
+      const safeMime = mime || "image/jpeg";
+      return `data:${safeMime};base64,${String(b64).trim()}`;
+    }
+
     return profile.PHOTO_URL || profile.PHOTOURL || null;
   }, [profile]);
 
@@ -822,13 +1354,6 @@ export default function OfficerProfilePage({ onLogout }) {
 
   const name = safeText(profile?.OFFICERNAME) || "Officer";
   const desig = safeText(profile?.DESIGNATIONDESC || profile?.DESIGNATION);
-
-  const fmt = (key, value) => {
-    const v = safeText(value);
-    if (v === "—") return "—";
-    if (isLikelyDateKey(key)) return toDDMMYYYY(v);
-    return v;
-  };
 
   const CNIC = safeText(profile?.CNICNO || profile?.CNIC || profile?.NICNO);
   const CELL = safeText(profile?.CELLNO || profile?.CELL || profile?.MOBILE);
@@ -925,13 +1450,9 @@ export default function OfficerProfilePage({ onLogout }) {
                 </div>
               </div>
 
-              {/* ✅ Eye-catching Quick Details (NO BLANK/BLACK) */}
+              {/* Quick Details */}
               <div className="p-5">
                 <div className="rounded-3xl border border-slate-200/70 bg-white/70 p-5">
-                  <div className="flex items-end justify-between gap-3 mb-4">
-                    <div></div>
-                  </div>
-
                   <SummaryPills CNIC={CNIC} CELL={CELL} POSTING={POSTING} />
 
                   <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -976,8 +1497,49 @@ export default function OfficerProfilePage({ onLogout }) {
 
           {/* RIGHT */}
           <div className="lg:col-span-8 space-y-4">
-            <CurrentPostingBanner rows={historyRows} />
-            <HistoryCard loading={historyLoading} rows={historyRows} />
+            {/* Tabs header */}
+            <div className="rounded-3xl border border-slate-200/70 bg-white/80 backdrop-blur shadow-sm overflow-hidden">
+              <div className="p-3 bg-gradient-to-r from-emerald-700 via-teal-600 to-sky-600 text-white flex items-center justify-between">
+                <div className="text-[14px] font-black">Details</div>
+                <div className="flex gap-2">
+                  <ToggleBtn
+                    active={activeTab === "posting"}
+                    onClick={() => setActiveTab("posting")}
+                  >
+                    Posting / Transfers
+                  </ToggleBtn>
+                  <ToggleBtn
+                    active={activeTab === "qual"}
+                    onClick={() => setActiveTab("qual")}
+                  >
+                    Qualifications
+                  </ToggleBtn>
+                  <ToggleBtn
+                    active={activeTab === "leaves"}
+                    onClick={() => setActiveTab("leaves")}
+                  >
+                    Leaves
+                  </ToggleBtn>
+                </div>
+              </div>
+            </div>
+
+            {activeTab === "posting" ? (
+              <>
+                <CurrentPostingBanner rows={historyRows} />
+                <HistoryCard loading={historyLoading} rows={historyRows} />
+              </>
+            ) : activeTab === "qual" ? (
+              <QualificationsCard loading={qualLoading} rows={qualRows} />
+            ) : (
+              <div className="space-y-4">
+                <LeavesYearlyCard
+                  loading={leaveYearLoading}
+                  rows={leaveYearRows}
+                />
+                <LeavesCard loading={leaveLoading} rows={leaveRows} />
+              </div>
+            )}
 
             {!officerId && (
               <div className="mt-4 text-slate-600 font-bold">

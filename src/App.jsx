@@ -11,20 +11,17 @@ import DiarySearchScreen from "./components/DiarySearchScreenQR";
 import UserDashboard from "./components/UserDashboard";
 import DiaryTracking from "./components/DiaryTracking";
 import MyFiles from "./components/MyFiles";
-import OfficerProfilePage from "./components/OfficerProfilePage";
 import DesignationDistricts from "./components/DesignationDistricts";
 
-// ✅ NEW: officer detail page
 import OfficerDetailPage from "./components/OfficerDetailPage";
+import OfficerProfilePage from "./components/OfficerProfilePage";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
     !!localStorage.getItem("token"),
   );
 
-  const handleLogin = () => {
-    setIsAuthenticated(true);
-  };
+  const handleLogin = () => setIsAuthenticated(true);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -32,14 +29,16 @@ function App() {
   };
 
   const ProtectedRoute = ({ children }) => {
-    return isAuthenticated ? children : <Navigate to="/login" />;
+    return isAuthenticated ? children : <Navigate to="/login" replace />;
   };
 
   return (
     <Router>
       <Routes>
+        {/* Public */}
         <Route path="/login" element={<Login onLogin={handleLogin} />} />
 
+        {/* Protected */}
         <Route
           path="/DiarySearchScreenQR"
           element={
@@ -85,7 +84,6 @@ function App() {
           }
         />
 
-        {/* ✅ NEW ROUTE */}
         <Route
           path="/dashboard/officer-detail"
           element={
@@ -94,7 +92,8 @@ function App() {
             </ProtectedRoute>
           }
         />
-        {/* ✅ NEW: Officer Profile Route */}
+
+        {/* ✅ Officer Profile (SINGLE PAGE with split tab components) */}
         <Route
           path="/dashboard/officer-profile"
           element={
@@ -103,7 +102,10 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="/" element={<Navigate to="/login" />} />
+
+        {/* Default */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>
   );
