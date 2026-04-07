@@ -1,21 +1,9 @@
 import React, { useMemo, useState } from "react";
 import {
-  MapPin,
-  Clock,
-  ArrowRightLeft,
-  Target,
-  Scale,
-  TrendingUp,
-  Sparkles,
-  Zap,
-  Compass,
-} from "lucide-react";
-import {
   safeText,
   parseDateSafe,
   daysBetween,
   fmtYMDLong,
-  fmtCalendarSpan,
 } from "../officerUtils/officerFormat.js";
 import {
   ResponsiveContainer,
@@ -35,10 +23,10 @@ import {
 const Chip = ({ children, tone = "light" }) => (
   <span
     className={[
-      "px-2.5 py-1 rounded-full text-[10.5px] font-black border shadow-sm backdrop-blur-sm",
+      "px-2.5 py-1 rounded-full text-[10.5px] font-black border shadow-sm",
       tone === "dark"
-        ? "bg-white/20 text-white border-white/25 shadow-white/10"
-        : "bg-white/95 text-slate-800 border-slate-200/80 ring-1 ring-white/60 shadow-[0_4px_14px_-6px_rgba(15,118,110,0.12)]",
+        ? "bg-white/20 text-white border-white/20"
+        : "bg-white/90 text-slate-800 border-slate-200/70",
     ].join(" ")}
   >
     {children}
@@ -71,11 +59,8 @@ const StatTile = ({
       type="button"
       onClick={onClick}
       className={[
-        "w-full text-left rounded-3xl border px-4 py-4 bg-gradient-to-br transition-all duration-300",
-        "hover:-translate-y-1 hover:shadow-[0_20px_48px_-22px_rgba(13,148,136,0.22)]",
-        active
-          ? "shadow-[0_18px_44px_-20px_rgba(13,148,136,0.32)] ring-2 ring-teal-300/50 ring-offset-2 ring-offset-white scale-[1.02]"
-          : "shadow-md shadow-slate-200/50",
+        "w-full text-left rounded-3xl border shadow-sm px-4 py-4 bg-gradient-to-br transition",
+        "hover:shadow-md hover:-translate-y-[1px]",
         toneCls,
       ].join(" ")}
     >
@@ -89,31 +74,21 @@ const StatTile = ({
 };
 
 const SectionCard = ({ title, subtitle, rightLabel, children }) => (
-  <div className="group relative overflow-hidden rounded-3xl border border-teal-200/45 bg-white shadow-[0_22px_60px_-28px_rgba(13,148,136,0.22)] ring-1 ring-teal-100/35 transition-all duration-300 hover:shadow-[0_28px_72px_-32px_rgba(13,148,136,0.3)] hover:-translate-y-0.5">
-    <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-teal-400/50 to-transparent" />
-    <div className="relative overflow-hidden bg-gradient-to-r from-emerald-950 via-teal-800 to-cyan-900 p-4 text-white shadow-[inset_0_-1px_0_rgba(255,255,255,0.08)] sm:p-5">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_100%_80%_at_100%_-20%,rgba(45,212,191,0.25),transparent_50%),radial-gradient(ellipse_80%_60%_at_0%_100%,rgba(167,139,250,0.12),transparent_45%)]" />
-      <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-cyan-400/10 blur-3xl" />
-      <div className="relative flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[15px] font-black tracking-tight text-white drop-shadow-sm sm:text-[17px]">
-            {title}
-          </div>
-          <div className="mt-1 max-w-xl text-[11px] font-semibold leading-snug text-teal-100/95">
-            {subtitle}
-          </div>
+  <div className="rounded-3xl border border-slate-200/70 bg-white/80 backdrop-blur shadow-sm overflow-hidden">
+    <div className="p-4 bg-gradient-to-r from-emerald-700 via-teal-600 to-sky-600 text-white">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[16px] font-black">{title}</div>
+          <div className="text-[11px] font-bold text-white/90">{subtitle}</div>
         </div>
         {rightLabel ? (
-          <span className="shrink-0 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white shadow-[0_8px_24px_-8px_rgba(0,0,0,0.25)] backdrop-blur-md">
+          <span className="px-3 py-1 rounded-full text-[11px] font-extrabold bg-white/15 border border-white/25">
             {rightLabel}
           </span>
         ) : null}
       </div>
     </div>
-    <div className="relative bg-gradient-to-b from-slate-50/50 via-white to-white p-4 sm:p-5">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(45,212,191,0.04),transparent_55%)]" />
-      <div className="relative">{children}</div>
-    </div>
+    <div className="p-4">{children}</div>
   </div>
 );
 
@@ -121,7 +96,7 @@ const Select = ({ value, onChange, options = [] }) => (
   <select
     value={value}
     onChange={onChange}
-    className="w-full rounded-2xl border border-slate-200/90 bg-white px-3 py-2.5 text-[13px] font-bold text-slate-800 shadow-[0_8px_24px_-12px_rgba(15,23,42,0.12)] outline-none ring-1 ring-slate-100/80 transition focus:border-teal-300 focus:ring-2 focus:ring-teal-400/35"
+    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[13px] font-bold text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-emerald-500/30"
   >
     {options.map((opt) => (
       <option key={opt.value} value={opt.value}>
@@ -191,26 +166,6 @@ const normalizePostingRows = (rows) => {
   );
   return list;
 };
-
-/**
- * Career window: earliest posting start → latest row end.
- * Use this for "years of service" style metrics. Summing per-row durations
- * inflates totals when history has overlapping rows or multiple open-ended TDATEs.
- */
-function getCareerCalendarBounds(rows) {
-  const list = (rows || []).filter((r) => r._from && r._to);
-  if (!list.length) return { start: null, end: null, days: 0 };
-  let minT = list[0]._from.getTime();
-  let maxT = list[0]._to.getTime();
-  for (let i = 1; i < list.length; i++) {
-    const r = list[i];
-    minT = Math.min(minT, r._from.getTime());
-    maxT = Math.max(maxT, r._to.getTime());
-  }
-  const start = new Date(minT);
-  const end = new Date(maxT);
-  return { start, end, days: daysBetween(start, end) };
-}
 
 /* ------------------------------ analytics -------------------------------- */
 const groupRows = (rows, keyFn) => {
@@ -304,6 +259,22 @@ const buildDesignationDistribution = (rows, bucket) => {
   return Object.entries(groups)
     .map(([k, g]) => summarizeRows(k, g))
     .sort((a, b) => b.count - a.count || b.totalDays - a.totalDays);
+};
+
+const buildStackedDesignationData = (rows, bucket) => {
+  const filtered = filterByBucket(rows, bucket);
+  const groups = groupRows(filtered, (r) => r._designation);
+
+  return Object.entries(groups)
+    .map(([k, g]) => ({
+      label: k,
+      short: g.filter((r) => r._isShortStay).length,
+      true: g.filter((r) => r._isTrueStay).length,
+      normal: g.filter((r) => !r._isShortStay && !r._isTrueStay).length,
+      count: g.length,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
 };
 
 const buildStayTypePie = (rows, bucket) => {
@@ -408,227 +379,19 @@ const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white/98 px-3 py-2.5 shadow-[0_16px_40px_-16px_rgba(15,23,42,0.2)] backdrop-blur-md ring-1 ring-white/80">
+    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-lg">
       {label ? (
-        <div className="text-[12px] font-black text-slate-900">{label}</div>
+        <div className="text-[11px] font-extrabold text-slate-900">{label}</div>
       ) : null}
-      <div className="mt-1.5 space-y-1">
-        {payload.map((p, idx) => {
-          const v = p.value;
-          const isDays =
-            typeof v === "number" &&
-            (p.dataKey === "totalDays" || String(p.name || "").includes("Days"));
-          const display =
-            isDays && typeof v === "number" ? `${v} d (${fmtYMDLong(v)})` : v;
-          return (
-            <div key={idx} className="text-[11px] font-bold text-slate-700">
-              {p.name}:{" "}
-              <span className="font-black text-slate-950">{display}</span>
-            </div>
-          );
-        })}
+      <div className="mt-1 space-y-1">
+        {payload.map((p, idx) => (
+          <div key={idx} className="text-[11px] font-bold text-slate-700">
+            {p.name}:{" "}
+            <span className="font-black text-slate-950">{p.value}</span>
+          </div>
+        ))}
       </div>
     </div>
-  );
-};
-
-const postingInsightTone = {
-  teal: {
-    border: "from-emerald-400 via-teal-500 to-cyan-400",
-    glow: "shadow-[0_18px_50px_-20px_rgba(20,184,166,0.35)]",
-    iconBg: "bg-gradient-to-br from-emerald-500 to-cyan-600 shadow-lg shadow-teal-500/25",
-    blob: "bg-teal-400/25",
-    blob2: "bg-cyan-300/15",
-  },
-  violet: {
-    border: "from-violet-400 via-fuchsia-500 to-purple-500",
-    glow: "shadow-[0_18px_50px_-20px_rgba(139,92,246,0.32)]",
-    iconBg: "bg-gradient-to-br from-violet-500 to-fuchsia-600 shadow-lg shadow-violet-500/25",
-    blob: "bg-violet-400/20",
-    blob2: "bg-fuchsia-300/15",
-  },
-  amber: {
-    border: "from-amber-400 via-orange-500 to-rose-400",
-    glow: "shadow-[0_18px_50px_-20px_rgba(245,158,11,0.28)]",
-    iconBg: "bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg shadow-amber-500/20",
-    blob: "bg-amber-400/25",
-    blob2: "bg-orange-300/15",
-  },
-  slate: {
-    border: "from-slate-300 via-slate-400 to-slate-500",
-    glow: "shadow-[0_14px_40px_-18px_rgba(15,23,42,0.12)]",
-    iconBg: "bg-gradient-to-br from-slate-600 to-slate-800 shadow-md",
-    blob: "bg-slate-300/20",
-    blob2: "bg-slate-400/10",
-  },
-};
-
-const InsightCallout = ({ icon: Icon, tone, title, body, hint }) => {
-  const t = postingInsightTone[tone] || postingInsightTone.slate;
-  return (
-    <div
-      className={`rounded-3xl bg-gradient-to-br ${t.border} p-[1.5px] ${t.glow} transition-transform duration-300 hover:scale-[1.01]`}
-    >
-      <div className="relative h-full overflow-hidden rounded-[22px] bg-gradient-to-br from-white via-white to-slate-50/90 ring-1 ring-white/70">
-        <div
-          className={`pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full ${t.blob} blur-2xl`}
-        />
-        <div
-          className={`pointer-events-none absolute -bottom-10 -left-8 h-24 w-24 rounded-full ${t.blob2} blur-3xl`}
-        />
-        <div className="relative flex items-start gap-3 p-4 sm:p-5">
-          <div
-            className={`mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-white ${t.iconBg}`}
-          >
-            <Icon size={20} strokeWidth={2.35} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
-              {title}
-            </div>
-            <div className="mt-2 text-sm font-bold leading-snug text-slate-900">
-              {body}
-            </div>
-            {hint ? (
-              <div className="mt-3 rounded-xl border border-slate-100/90 bg-slate-50/80 px-3 py-2 text-[11px] font-semibold leading-snug text-slate-600">
-                {hint}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-/** Action-oriented signals derived from filtered posting rows. */
-const DecisionInsights = ({ rows, bucket }) => {
-  const filtered = useMemo(() => filterByBucket(rows, bucket), [rows, bucket]);
-  const insights = useMemo(() => {
-    const n = filtered.length;
-    if (!n)
-      return {
-        topDistrict: null,
-        topDesig: null,
-        shortPct: 0,
-        truePct: 0,
-        inFieldShare: 0,
-        careerBounds: { start: null, end: null, days: 0 },
-      };
-
-    const short = filtered.filter((r) => r._isShortStay).length;
-    const tru = filtered.filter((r) => r._isTrueStay).length;
-    const careerBounds = getCareerCalendarBounds(filtered);
-
-    const distMap = groupRows(filtered, (r) => r._district);
-    let topDistrict = null;
-    let maxD = 0;
-    for (const [d, g] of Object.entries(distMap)) {
-      const td = g.reduce((s, r) => s + (r._durationDays || 0), 0);
-      if (td > maxD && safeText(d) && d !== "Unknown") {
-        maxD = td;
-        topDistrict = { name: d, days: td, postings: g.length };
-      }
-    }
-
-    const desMap = groupRows(filtered, (r) => r._designation);
-    let topDesig = null;
-    let maxC = 0;
-    for (const [dg, g] of Object.entries(desMap)) {
-      if (g.length > maxC && safeText(dg) && dg !== "Unknown") {
-        maxC = g.length;
-        topDesig = { name: dg, count: g.length };
-      }
-    }
-
-    const inField = filtered.filter((r) => r._bucket === "In Field").length;
-
-    return {
-      topDistrict,
-      topDesig,
-      shortPct: (short / n) * 100,
-      truePct: (tru / n) * 100,
-      inFieldShare: (inField / n) * 100,
-      careerBounds,
-      count: n,
-    };
-  }, [filtered]);
-
-  if (!insights.count) return null;
-
-  const bucketLabel =
-    bucket === "All" ? "all postings" : bucket === "In Field" ? "in-field" : "ex-cadre";
-
-  return (
-    <SectionCard
-      title="Decision-ready insights"
-      subtitle="Highlights for posting review, transfer planning, and tenure balance"
-      rightLabel={bucket}
-    >
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
-        {insights.topDistrict ? (
-          <InsightCallout
-            icon={MapPin}
-            tone="teal"
-            title="Largest tenure concentration"
-            body={`${insights.topDistrict.name} — ${fmtYMDLong(insights.topDistrict.days)} summed days across ${insights.topDistrict.postings} posting row(s).`}
-            hint="Sum of segment lengths in this district (same basis as bar charts). Compare with career span below for calendar service length."
-          />
-        ) : null}
-
-        {insights.topDesig ? (
-          <InsightCallout
-            icon={Scale}
-            tone="violet"
-            title="Most frequent role"
-            body={`${insights.topDesig.name} — ${insights.topDesig.count} posting record(s).`}
-            hint="Shows dominant designation exposure in the selected filter."
-          />
-        ) : null}
-
-        <InsightCallout
-          icon={ArrowRightLeft}
-          tone={insights.shortPct > 35 ? "amber" : "slate"}
-          title={"Mobility (under 2 months per posting)"}
-          body={`${insights.shortPct.toFixed(0)}% of ${bucketLabel} (${Math.round((insights.shortPct / 100) * insights.count)} records).`}
-          hint={
-            insights.shortPct > 35
-              ? "Elevated short stays — check for rapid transfers or interim postings."
-              : "Short stays within a typical range for context."
-          }
-        />
-
-        <InsightCallout
-          icon={Clock}
-          tone={insights.truePct > 25 ? "teal" : "slate"}
-          title={"Stability (over 1.5 years per posting)"}
-          body={`${insights.truePct.toFixed(0)}% of ${bucketLabel} are long stays. Calendar career span in this view: ${fmtCalendarSpan(insights.careerBounds.start, insights.careerBounds.end)}.`}
-          hint={
-            insights.truePct > 25
-              ? "Strong long postings — useful for depth-of-experience narrative."
-              : "Span = earliest start to latest end (not sum of rows), so it matches typical service length."
-          }
-        />
-
-        {bucket === "All" ? (
-          <InsightCallout
-            icon={Target}
-            tone="violet"
-            title="Field vs ex-cadre mix"
-            body={`About ${insights.inFieldShare.toFixed(0)}% of records are In Field postings.`}
-            hint="Toggle In Field / Ex-Cadre above to drill into each stream."
-          />
-        ) : null}
-
-        <InsightCallout
-          icon={TrendingUp}
-          tone="teal"
-          title="Career span in view"
-          body={`${insights.count} posting row(s). Calendar span ${fmtCalendarSpan(insights.careerBounds.start, insights.careerBounds.end)} (${insights.careerBounds.days.toLocaleString()} days from first start to latest end).`}
-          hint="Not the sum of each row’s length — avoids double-count when several rows share open dates or overlap."
-        />
-      </div>
-    </SectionCard>
   );
 };
 
@@ -639,7 +402,7 @@ const BucketTiles = ({ rows, activeBucket, onChange }) => {
   const ex = summary.find((x) => x.label === "Ex-Cadre");
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
       <StatTile
         title="All Postings"
         value={allCount}
@@ -678,15 +441,15 @@ const BucketPie = ({ rows }) => {
       rightLabel={`${rows.length || 0} Records`}
     >
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-center">
-        <div className="xl:col-span-6 h-[360px]">
+        <div className="xl:col-span-6 h-[320px]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={data}
                 dataKey="count"
                 nameKey="label"
-                outerRadius={118}
-                innerRadius={52}
+                outerRadius={105}
+                innerRadius={48}
                 cx="50%"
                 cy="50%"
                 label={({ name, percent }) =>
@@ -713,7 +476,7 @@ const BucketPie = ({ rows }) => {
           {data.map((x, idx) => (
             <div
               key={idx}
-              className="rounded-2xl border border-slate-200/60 bg-gradient-to-br from-white to-slate-50/80 px-4 py-3.5 shadow-[0_12px_36px_-18px_rgba(15,23,42,0.1)] ring-1 ring-white/80 transition hover:shadow-[0_16px_44px_-18px_rgba(13,148,136,0.15)]"
+              className="rounded-2xl border border-slate-200/70 bg-white/85 px-3 py-3"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -756,15 +519,15 @@ const StayTypePieChart = ({ rows, bucket }) => {
       rightLabel={bucket}
     >
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-center">
-        <div className="xl:col-span-7 h-[400px]">
+        <div className="xl:col-span-7 h-[340px]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={data}
                 dataKey="count"
                 nameKey="label"
-                outerRadius={120}
-                innerRadius={48}
+                outerRadius={110}
+                innerRadius={45}
                 label={({ name, percent }) =>
                   `${name} ${(percent * 100).toFixed(0)}%`
                 }
@@ -789,7 +552,7 @@ const StayTypePieChart = ({ rows, bucket }) => {
           {data.map((x, idx) => (
             <div
               key={idx}
-              className="rounded-2xl border border-slate-200/60 bg-gradient-to-br from-white to-violet-50/30 px-4 py-3.5 shadow-[0_12px_36px_-18px_rgba(109,40,217,0.12)] ring-1 ring-white/80"
+              className="rounded-2xl border border-slate-200/70 bg-white px-3 py-3"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -853,16 +616,16 @@ const DistrictWiseStayBarChart = ({ rows, bucket }) => {
       rightLabel={`${data.length} Districts`}
     >
       {!data.length ? (
-        <div className="rounded-2xl border border-dashed border-cyan-200/80 bg-cyan-50/40 py-12 text-center text-sm font-bold text-slate-500">
+        <div className="py-10 text-center text-slate-500 font-bold">
           No district data found.
         </div>
       ) : (
         <>
-          <div className="h-[420px]">
+          <div className="h-[380px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={data}
-                margin={{ top: 14, right: 24, left: 4, bottom: 76 }}
+                margin={{ top: 10, right: 20, left: 0, bottom: 70 }}
               >
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
@@ -886,11 +649,11 @@ const DistrictWiseStayBarChart = ({ rows, bucket }) => {
             </ResponsiveContainer>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-3">
             {data.slice(0, 6).map((x, idx) => (
               <div
                 key={idx}
-                className="rounded-2xl border border-cyan-100/80 bg-gradient-to-br from-white to-cyan-50/40 px-4 py-3 shadow-[0_10px_32px_-16px_rgba(8,145,178,0.15)] ring-1 ring-white/80"
+                className="rounded-2xl border border-slate-200/70 bg-white px-3 py-3"
               >
                 <div className="text-[13px] font-black text-slate-950">
                   {x.district}
@@ -924,19 +687,19 @@ const DesignationPieChart = ({ rows, bucket }) => {
       rightLabel={`${data.length} Designations`}
     >
       {!data.length ? (
-        <div className="rounded-2xl border border-dashed border-violet-200/80 bg-violet-50/40 py-12 text-center text-sm font-bold text-slate-500">
+        <div className="py-10 text-center text-slate-500 font-bold">
           No data found.
         </div>
       ) : (
-        <div className="h-[380px]">
+        <div className="h-[340px]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={data}
                 dataKey="count"
                 nameKey="label"
-                outerRadius={118}
-                innerRadius={44}
+                outerRadius={110}
+                innerRadius={42}
                 label={({ name, percent }) =>
                   `${name} ${(percent * 100).toFixed(0)}%`
                 }
@@ -990,20 +753,20 @@ const DistrictDesignationStayPieChart = ({ rows, bucket }) => {
       </div>
 
       {!data.length ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 py-12 text-center text-sm font-bold text-slate-500">
+        <div className="py-10 text-center text-slate-500 font-bold">
           No data found for selected district.
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 items-center xl:grid-cols-12">
-          <div className="xl:col-span-7 h-[400px]">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-center">
+          <div className="xl:col-span-7 h-[360px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={data}
                   dataKey="totalDays"
                   nameKey="label"
-                  outerRadius={122}
-                  innerRadius={50}
+                  outerRadius={112}
+                  innerRadius={46}
                   label={({ name, percent }) =>
                     `${name} ${(percent * 100).toFixed(0)}%`
                   }
@@ -1025,7 +788,7 @@ const DistrictDesignationStayPieChart = ({ rows, bucket }) => {
             {data.map((x, idx) => (
               <div
                 key={idx}
-                className="rounded-2xl border border-indigo-100/80 bg-gradient-to-br from-white to-indigo-50/35 px-4 py-3.5 shadow-[0_10px_32px_-16px_rgba(99,102,241,0.14)] ring-1 ring-white/80"
+                className="rounded-2xl border border-slate-200/70 bg-white px-3 py-3"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -1057,41 +820,60 @@ const DistrictDesignationStayPieChart = ({ rows, bucket }) => {
   );
 };
 
-const kpiAccentBorder = {
-  slate: "from-slate-300 to-slate-500",
-  teal: "from-teal-400 to-cyan-500",
-  amber: "from-amber-400 to-orange-500",
-  violet: "from-violet-400 to-fuchsia-500",
-};
+const StackedDesignationChart = ({ rows, bucket }) => {
+  const data = useMemo(
+    () => buildStackedDesignationData(rows, bucket),
+    [rows, bucket],
+  );
 
-const kpiAccentInner = {
-  slate: "from-slate-50 via-white to-white",
-  teal: "from-teal-50/90 via-cyan-50/40 to-white",
-  amber: "from-amber-50/90 via-orange-50/30 to-white",
-  violet: "from-violet-50/90 via-fuchsia-50/35 to-white",
-};
-
-const KpiCard = ({ label, value, sub, accent = "slate" }) => {
-  const b = kpiAccentBorder[accent] || kpiAccentBorder.slate;
-  const inner = kpiAccentInner[accent] || kpiAccentInner.slate;
   return (
-    <div
-      className={`rounded-2xl bg-gradient-to-br ${b} p-[1px] shadow-[0_14px_40px_-18px_rgba(13,148,136,0.15)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_48px_-20px_rgba(13,148,136,0.22)]`}
+    <SectionCard
+      title="Designation-wise Tenure Mix"
+      subtitle="Short vs normal vs true stay"
+      rightLabel={`${data.length} Designations`}
     >
-      <div
-        className={`h-full rounded-[13px] bg-gradient-to-br ${inner} px-4 py-4 ring-1 ring-white/60`}
-      >
-        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-          {label}
+      {!data.length ? (
+        <div className="py-10 text-center text-slate-500 font-bold">
+          No data found.
         </div>
-        <div className="mt-2 text-2xl font-black tabular-nums leading-none text-transparent bg-clip-text bg-gradient-to-r from-slate-900 to-slate-700 sm:text-[28px]">
-          {value}
+      ) : (
+        <div className="h-[380px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={data}
+              margin={{ top: 10, right: 20, left: 0, bottom: 60 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="label"
+                angle={-25}
+                textAnchor="end"
+                interval={0}
+                height={70}
+                tick={{ fontSize: 11, fontWeight: 700 }}
+              />
+              <YAxis tick={{ fontSize: 11, fontWeight: 700 }} />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend />
+              <Bar
+                dataKey="short"
+                stackId="a"
+                name="Short < 2 Months"
+                fill="#f59e0b"
+              />
+              <Bar dataKey="normal" stackId="a" name="Normal" fill="#0f766e" />
+              <Bar
+                dataKey="true"
+                stackId="a"
+                name="True > 1.5 Years"
+                fill="#7c3aed"
+                radius={[8, 8, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-        {sub ? (
-          <div className="mt-2 text-[11px] font-bold text-slate-600">{sub}</div>
-        ) : null}
-      </div>
-    </div>
+      )}
+    </SectionCard>
   );
 };
 
@@ -1107,62 +889,49 @@ const InsightPanel = ({ rows, bucket }) => {
 
   const shortCount = filtered.filter((r) => r._isShortStay).length;
   const trueCount = filtered.filter((r) => r._isTrueStay).length;
-  const normalCount = totalPostings - shortCount - trueCount;
-  const shortPct = totalPostings ? (shortCount / totalPostings) * 100 : 0;
-  const truePct = totalPostings ? (trueCount / totalPostings) * 100 : 0;
-  const careerBounds = getCareerCalendarBounds(filtered);
 
   return (
     <SectionCard
-      title="Executive KPIs"
-      subtitle="Numbers for the selected scope — compare tenure mix at a glance"
+      title="Analytical Summary"
+      subtitle="High level analytical figures"
       rightLabel={bucket}
     >
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <KpiCard
-          label="Posting records"
-          value={totalPostings}
-          sub="Rows in filtered set"
-          accent="teal"
-        />
-        <KpiCard
-          label="Avg tenure / posting"
-          value={fmtYMDLong(avgDays)}
-          sub={`${avgDays.toLocaleString()} days`}
-          accent="slate"
-        />
-        <KpiCard
-          label="Short stays"
-          value={shortCount}
-          sub={`${shortPct.toFixed(0)}% · under 2 months`}
-          accent="amber"
-        />
-        <KpiCard
-          label="True stays"
-          value={trueCount}
-          sub={`${truePct.toFixed(0)}% · over 1.5 years`}
-          accent="violet"
-        />
-      </div>
-      <div className="mt-5 flex flex-wrap gap-2">
-        <span className="inline-flex items-center gap-2 rounded-full border border-teal-200/60 bg-gradient-to-r from-teal-50/90 to-cyan-50/50 px-4 py-2 text-[11px] font-bold text-teal-950 shadow-[0_8px_24px_-10px_rgba(13,148,136,0.25)] ring-1 ring-white/80 backdrop-blur-sm">
-          <Clock size={15} className="shrink-0 text-teal-600" strokeWidth={2.25} />
-          <span>
-            Career span:{" "}
-            <span className="font-black text-slate-900">
-              {fmtCalendarSpan(careerBounds.start, careerBounds.end)}
-            </span>
-            <span className="font-semibold text-teal-800/80">
-              {" "}
-              ({careerBounds.days.toLocaleString()} d)
-            </span>
-          </span>
-        </span>
-        <span className="inline-flex items-center gap-2 rounded-full border border-violet-200/60 bg-gradient-to-r from-violet-50/90 to-fuchsia-50/40 px-4 py-2 text-[11px] font-bold text-violet-950 shadow-[0_8px_24px_-10px_rgba(139,92,246,0.2)] ring-1 ring-white/80 backdrop-blur-sm">
-          <Compass size={15} className="shrink-0 text-violet-600" strokeWidth={2.25} />
-          Mid tenure:{" "}
-          <span className="font-black text-slate-900">{normalCount}</span>
-        </span>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className="rounded-2xl border border-slate-200/70 bg-slate-50 px-3 py-3">
+          <div className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">
+            Postings
+          </div>
+          <div className="mt-1 text-[18px] font-black text-slate-950">
+            {totalPostings}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200/70 bg-slate-50 px-3 py-3">
+          <div className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">
+            Avg Tenure
+          </div>
+          <div className="mt-1 text-[18px] font-black text-slate-950">
+            {fmtYMDLong(avgDays)}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200/70 bg-slate-50 px-3 py-3">
+          <div className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">
+            Short Stay
+          </div>
+          <div className="mt-1 text-[18px] font-black text-slate-950">
+            {shortCount}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200/70 bg-slate-50 px-3 py-3">
+          <div className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-500">
+            True Stay
+          </div>
+          <div className="mt-1 text-[18px] font-black text-slate-950">
+            {trueCount}
+          </div>
+        </div>
       </div>
     </SectionCard>
   );
@@ -1171,44 +940,13 @@ const InsightPanel = ({ rows, bucket }) => {
 /* ----------------------------- dashboard only ----------------------------- */
 const PostingDashboard = ({ items }) => {
   const [activeBucket, setActiveBucket] = useState("All");
-  const careerQuick = useMemo(() => getCareerCalendarBounds(items), [items]);
 
   return (
-    <div className="relative space-y-6 overflow-hidden rounded-[2.5rem] border border-teal-200/45 bg-gradient-to-br from-teal-50/50 via-white to-cyan-50/25 p-4 shadow-[0_28px_80px_-38px_rgba(13,148,136,0.32)] ring-1 ring-teal-100/35 sm:p-6">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_55%_at_15%_-15%,rgba(45,212,191,0.14),transparent_52%),radial-gradient(ellipse_70%_45%_at_95%_105%,rgba(167,139,250,0.1),transparent_48%)]" />
-      <div className="pointer-events-none absolute -right-24 top-0 h-72 w-72 rounded-full bg-gradient-to-br from-teal-300/15 to-cyan-200/10 blur-3xl" />
-
-      <div className="relative flex flex-col gap-4 border-b border-teal-100/60 pb-6 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-teal-500 via-emerald-500 to-cyan-600 text-white shadow-[0_16px_40px_-12px_rgba(13,148,136,0.5)] ring-2 ring-white/40">
-            <Sparkles size={28} strokeWidth={2.2} />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-teal-800 via-emerald-700 to-cyan-700 sm:text-2xl">
-              Posting intelligence
-            </h2>
-            <p className="mt-1 max-w-2xl text-xs font-semibold leading-relaxed text-slate-600 sm:text-sm">
-              Filter by scope, scan decision-ready insights and KPIs, then drill
-              into charts for districts and designations.
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/75 px-4 py-2 text-[11px] font-black uppercase tracking-wider text-teal-900 shadow-[0_10px_30px_-12px_rgba(13,148,136,0.3)] backdrop-blur-md">
-            <TrendingUp size={14} className="text-teal-600" strokeWidth={2.5} />
-            {items.length} postings
-          </span>
-          <span className="inline-flex items-center gap-2 rounded-full border border-indigo-100/90 bg-gradient-to-r from-indigo-50/90 to-violet-50/50 px-4 py-2 text-[11px] font-bold text-indigo-950 shadow-md backdrop-blur-sm">
-            <MapPin size={14} className="text-violet-600" strokeWidth={2.25} />
-            Span {fmtCalendarSpan(careerQuick.start, careerQuick.end)}
-          </span>
-        </div>
-      </div>
-
+    <div className="space-y-4">
       <SectionCard
-        title="Analysis scope"
-        subtitle="Filter every chart and KPI below — All, In Field, or Ex-Cadre"
-        rightLabel={`${items.length || 0} records`}
+        title="Posting Analysis Dashboard"
+        subtitle="Graphs only analytical portal"
+        rightLabel={`${items.length || 0} Records`}
       >
         <BucketTiles
           rows={items}
@@ -1217,19 +955,20 @@ const PostingDashboard = ({ items }) => {
         />
       </SectionCard>
 
-      <DecisionInsights rows={items} bucket={activeBucket} />
-      <InsightPanel rows={items} bucket={activeBucket} />
       <BucketPie rows={items} />
+      <InsightPanel rows={items} bucket={activeBucket} />
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <StayTypePieChart rows={items} bucket={activeBucket} />
         <DistrictWiseStayBarChart rows={items} bucket={activeBucket} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <DesignationPieChart rows={items} bucket={activeBucket} />
         <DistrictDesignationStayPieChart rows={items} bucket={activeBucket} />
       </div>
+
+      <StackedDesignationChart rows={items} bucket={activeBucket} />
     </div>
   );
 };
@@ -1239,22 +978,9 @@ export default function PostingTransfersTab({ historyRows, historyLoading }) {
 
   if (historyLoading) {
     return (
-      <div className="relative overflow-hidden rounded-[2.5rem] border border-teal-200/50 bg-gradient-to-br from-teal-50/90 via-white to-violet-50/40 p-10 shadow-[0_28px_70px_-35px_rgba(13,148,136,0.28)]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(45,212,191,0.18),transparent_50%)]" />
-        <div className="relative flex flex-col items-center gap-5">
-          <div className="relative h-16 w-16">
-            <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-teal-400 to-violet-500 opacity-35 blur-xl animate-pulse" />
-            <div className="relative h-16 w-16 rounded-full border-[3px] border-teal-200/80 border-t-teal-600 border-l-violet-500 animate-spin" />
-            <Zap className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 text-teal-600" />
-          </div>
-          <p className="text-sm font-black uppercase tracking-widest text-teal-800/85">
-            Building posting intelligence…
-          </p>
-          <div className="w-full max-w-md space-y-3">
-            <div className="h-3 rounded-full bg-gradient-to-r from-teal-100 via-cyan-100 to-teal-100 animate-pulse" />
-            <div className="mx-auto h-3 w-4/5 rounded-full bg-gradient-to-r from-violet-100 via-fuchsia-100 to-violet-100 animate-pulse" />
-            <div className="h-28 rounded-2xl bg-gradient-to-br from-slate-100 to-teal-50/50 animate-pulse shadow-inner" />
-          </div>
+      <div className="rounded-3xl border border-slate-200/70 bg-white/80 backdrop-blur shadow-sm overflow-hidden">
+        <div className="p-10 text-center text-slate-500 font-bold">
+          Loading analysis...
         </div>
       </div>
     );
@@ -1262,16 +988,10 @@ export default function PostingTransfersTab({ historyRows, historyLoading }) {
 
   if (!items.length) {
     return (
-      <div className="relative overflow-hidden rounded-[2.5rem] border border-dashed border-teal-200/70 bg-gradient-to-br from-slate-50 via-white to-teal-50/30 p-14 text-center shadow-inner">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-teal-200/20 blur-3xl" />
-        <Compass className="mx-auto h-14 w-14 text-teal-300" strokeWidth={1.15} />
-        <p className="mt-4 text-base font-black text-slate-700">
-          No posting history for analytics
-        </p>
-        <p className="mx-auto mt-2 max-w-sm text-xs font-semibold leading-relaxed text-slate-500">
-          Open <span className="font-bold text-teal-700">Posting History</span>{" "}
-          to confirm data from the service.
-        </p>
+      <div className="rounded-3xl border border-slate-200/70 bg-white/80 backdrop-blur shadow-sm overflow-hidden">
+        <div className="p-10 text-center text-slate-500 font-bold">
+          No posting history found.
+        </div>
       </div>
     );
   }

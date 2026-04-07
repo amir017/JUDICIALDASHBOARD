@@ -17,6 +17,16 @@ import {
   LabelList,
 } from "recharts";
 
+// ✅ Simple spinner (no external gif required)
+function Spinner({ label = "Loading..." }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-10">
+      <div className="h-10 w-10 rounded-full border-4 border-white/40 border-t-white animate-spin" />
+      <div className="text-[12px] font-bold text-white/90">{label}</div>
+    </div>
+  );
+}
+
 export default function DashboardSinglePage({ onLogout }) {
   const navigate = useNavigate();
 
@@ -33,6 +43,9 @@ export default function DashboardSinglePage({ onLogout }) {
 
   const [loadingLeft, setLoadingLeft] = useState(true);
   const [loadingRight, setLoadingRight] = useState(true);
+
+  // ✅ initial page load overlay
+  const [pageLoading, setPageLoading] = useState(true);
 
   const [selectedDesignation, setSelectedDesignation] = useState("ALL");
   const [selectedDistrict, setSelectedDistrict] = useState(null);
@@ -145,7 +158,6 @@ export default function DashboardSinglePage({ onLogout }) {
     for (const r of filtered) {
       const id = String(r.designationId ?? r.designationDesc ?? "").trim();
       const label = String(r.designationDesc ?? "").trim();
-
       const key = `${id}||${label}`;
       const prev = map.get(key) ?? { id, label, count: 0 };
       prev.count += toNumber(r.cnt);
@@ -173,19 +185,10 @@ export default function DashboardSinglePage({ onLogout }) {
     return list;
   };
 
-  /**
-   * ✅ IMPORTANT FIX:
-   * Always call ONE overall district API that accepts `cadre`.
-   * (So district-wise changes when you click IN_FIELD / EX_CADRE)
-   *
-   * Your Api.js must have:
-   *   Api.getDistrictPostingCountoverAll(cadre)
-   * that sends ?cadre=IN_FIELD / EX_CADRE / ALL
-   */
+  // ✅ OVERALL DISTRICT (cadre aware) — must accept cadre param
   const fetchOverallDistrictTiles = async (cadre = "ALL") => {
     try {
       const data = await Api.getDistrictPostingCountoverAll(cadre);
-
       return (data || []).map((x) => ({
         id: x.DISTRICTID ?? x.DISTRICTNAME,
         label: x.DISTRICTNAME,
@@ -199,10 +202,10 @@ export default function DashboardSinglePage({ onLogout }) {
     }
   };
 
+  // ✅ DESIGNATION -> DISTRICT (cadre aware)
   const fetchDistrictByDesignation = async (designationDesc, cadre = "ALL") => {
     try {
       const data = await Api.getDistrictPostingCount(designationDesc, cadre);
-
       return (data || []).map((x) => ({
         label: x.DISTRICTNAME,
         count: toNumber(x.TOTAL ?? x.CNT ?? x.COUNT),
@@ -215,9 +218,12 @@ export default function DashboardSinglePage({ onLogout }) {
     }
   };
 
-  const fetchDesignationsByDistrict = async (districtName) => {
-    const data =
-      await Api.getDesignationWiseCountWithDistrictFilter(districtName);
+  // ✅ DISTRICT -> DESIGNATION (cadre aware)
+  const fetchDesignationsByDistrict = async (districtName, cadre = "ALL") => {
+    const data = await Api.getDesignationWiseCountWithDistrictFilter(
+      districtName,
+      cadre,
+    );
 
     const toIdParts = (id) => {
       const s = String(id ?? "").trim();
@@ -252,7 +258,7 @@ export default function DashboardSinglePage({ onLogout }) {
     return tiles.map(({ designationId, ...rest }) => rest);
   };
 
-  // ✅ keep district positions stable (master + counts + keep division)
+  // ✅ keep district positions stable
   const applyDesignationToDistrictGrid = (countsList) => {
     const countsMap = new Map(
       (countsList || []).map((x) => [
@@ -280,6 +286,7 @@ export default function DashboardSinglePage({ onLogout }) {
 
     (async () => {
       try {
+        setPageLoading(true);
         setLoadingLeft(true);
         setLoadingRight(true);
 
@@ -296,7 +303,6 @@ export default function DashboardSinglePage({ onLogout }) {
         setBaseDesignationTiles(aggAll);
         setDesignationTiles(aggAll);
 
-        // ✅ MASTER: DIVISION → DISTRICT (default)
         const master = [...(d2 || [])].sort((a, b) => {
           const ad = String(a.division ?? "").localeCompare(
             String(b.division ?? ""),
@@ -307,7 +313,9 @@ export default function DashboardSinglePage({ onLogout }) {
           return String(a.label ?? "").localeCompare(
             String(b.label ?? ""),
             "en",
-            { sensitivity: "base" },
+            {
+              sensitivity: "base",
+            },
           );
         });
 
@@ -331,6 +339,7 @@ export default function DashboardSinglePage({ onLogout }) {
         if (mounted) {
           setLoadingLeft(false);
           setLoadingRight(false);
+          setPageLoading(false);
         }
       }
     })();
@@ -338,9 +347,10 @@ export default function DashboardSinglePage({ onLogout }) {
     return () => {
       mounted = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---------------- division color map (stable) ----------------
+  // ---------------- division color map ----------------
   const divisionColorMap = useMemo(() => {
     const divisions = [];
     const seen = new Set();
@@ -366,7 +376,7 @@ export default function DashboardSinglePage({ onLogout }) {
 
   const fallbackDivisionColor = DIVISION_COLORS_9[0];
 
-  // ---------------- cadre totals ----------------
+  // ---------------- totals ----------------
   const totalOverall = useMemo(() => {
     const sum = rawDesignationRows.reduce((s, r) => s + toNumber(r.cnt), 0);
     return Number.isFinite(sum) ? sum : 0;
@@ -386,24 +396,20 @@ export default function DashboardSinglePage({ onLogout }) {
     return Number.isFinite(sum) ? sum : 0;
   }, [rawDesignationRows]);
 
-  // ---------------- cadre click (top header) ----------------
+  // ---------------- cadre click (top) ----------------
   const onCadreClick = async (cadre) => {
-    // ✅ fix: set ref immediately (avoid stale ALL in next click)
     selectedCadreRef.current = cadre;
     setSelectedCadre(cadre);
 
-    // reset other filters
     setSelectedDesignation("ALL");
     setSelectedDistrict(null);
     setDistrictQuery("");
     setDistrictSort("division_az");
 
-    // left: rebuild tiles from raw rows
     const agg = aggregateDesignationTiles(rawDesignationRows, cadre);
     setBaseDesignationTiles(agg);
     setDesignationTiles(agg);
 
-    // ✅ right: ALWAYS reload districts for that cadre
     setLoadingRight(true);
     try {
       const d2 = await fetchOverallDistrictTiles(cadre);
@@ -418,7 +424,9 @@ export default function DashboardSinglePage({ onLogout }) {
         return String(a.label ?? "").localeCompare(
           String(b.label ?? ""),
           "en",
-          { sensitivity: "base" },
+          {
+            sensitivity: "base",
+          },
         );
       });
 
@@ -436,14 +444,12 @@ export default function DashboardSinglePage({ onLogout }) {
   const onDesignationClick = async (labelOrAll) => {
     setSelectedDistrict(null);
 
-    // keep current cadre
     setSelectedDesignation(labelOrAll);
     setLoadingRight(true);
 
     setDistrictQuery("");
     setDistrictSort("division_az");
 
-    // reset left list to base (current cadre aggregation)
     setDesignationTiles(baseDesignationTiles);
 
     try {
@@ -452,9 +458,7 @@ export default function DashboardSinglePage({ onLogout }) {
         return;
       }
 
-      // ✅ use ref so cadre is never stale
       const cadreToUse = selectedCadreRef.current || "ALL";
-
       const list = await fetchDistrictByDesignation(labelOrAll, cadreToUse);
       applyDesignationToDistrictGrid(list);
     } catch (e) {
@@ -465,10 +469,10 @@ export default function DashboardSinglePage({ onLogout }) {
     }
   };
 
+  // ---------------- district click (✅ cadre-aware) ----------------
   const onDistrictClick = async (districtName) => {
     if (!districtName) return;
 
-    // keep cadre selection (designation list by district is existing API; may not be cadre-aware)
     setSelectedDesignation("ALL");
     setDistrictTiles(masterDistrictTiles);
     setDistrictQuery("");
@@ -478,7 +482,8 @@ export default function DashboardSinglePage({ onLogout }) {
     setLoadingLeft(true);
 
     try {
-      const tiles = await fetchDesignationsByDistrict(districtName);
+      const cadreToUse = selectedCadreRef.current || "ALL";
+      const tiles = await fetchDesignationsByDistrict(districtName, cadreToUse);
       setDesignationTiles(tiles);
     } catch (e) {
       console.error("Load designation by district error:", e);
@@ -488,14 +493,16 @@ export default function DashboardSinglePage({ onLogout }) {
     }
   };
 
-  // details navigation
+  // navigation
   const goToDesignationDetails = (designationId, designationLabel) => {
+    const cadreToUse = selectedCadreRef.current || selectedCadre || "ALL";
+
     navigate("/dashboard/officer-detail", {
       state: {
         designationId: designationId ?? "ALL",
         designation: designationLabel ?? "ALL",
         districtName: selectedDistrict ?? null,
-        cadre: selectedCadreRef.current || selectedCadre,
+        cadre: cadreToUse,
       },
     });
   };
@@ -510,27 +517,6 @@ export default function DashboardSinglePage({ onLogout }) {
       },
     });
   };
-
-  // ---------------- totals ----------------
-  const totalLeft = useMemo(() => {
-    const sum = designationTiles.reduce((s, t) => s + toNumber(t.count), 0);
-    return Number.isFinite(sum) ? sum : 0;
-  }, [designationTiles]);
-
-  const totalRight = useMemo(() => {
-    const sum = districtTiles.reduce((s, t) => s + toNumber(t.count), 0);
-    return Number.isFinite(sum) ? sum : 0;
-  }, [districtTiles]);
-
-  const headerLabel = selectedDistrict
-    ? `Total in District: ${selectedDistrict}`
-    : selectedDesignation === "ALL"
-      ? selectedCadre === "ALL"
-        ? "Total Judges (Overall)"
-        : selectedCadre === "IN_FIELD"
-          ? "Total Judges (IN FIELD)"
-          : "Total Judges (EX-CADRE)"
-      : `Total in ${selectedDesignation}`;
 
   // ---------------- district filter list ----------------
   const filteredDistricts = useMemo(() => {
@@ -580,7 +566,14 @@ export default function DashboardSinglePage({ onLogout }) {
   // ---------------- render ----------------
   return (
     <Layout onLogout={onLogout}>
-      <div className="bg-slate-50 min-h-[calc(100vh-88px)] overflow-auto">
+      <div className="bg-slate-50 min-h-[calc(100vh-88px)] overflow-auto relative">
+        {/* ✅ Full page overlay loader (initial load) */}
+        {pageLoading && (
+          <div className="absolute inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center">
+            <Spinner label="Loading dashboard..." />
+          </div>
+        )}
+
         {/* Slim top bar */}
         <div className="px-2 pt-2">
           <div className="flex items-center justify-end gap-2">
@@ -617,9 +610,7 @@ export default function DashboardSinglePage({ onLogout }) {
             className={`${TOTAL_COLOR} rounded-2xl text-white shadow-xl mb-3 border border-white/10`}
           >
             <div className="relative py-3 px-4">
-              {/* ✅ Single row + tile style */}
               <div className="flex items-stretch justify-center gap-3 flex-nowrap overflow-x-auto">
-                {/* TOTAL */}
                 <button
                   onClick={() => onCadreClick("ALL")}
                   className={`min-w-[230px] px-5 py-2 rounded-2xl shadow-lg
@@ -639,7 +630,6 @@ export default function DashboardSinglePage({ onLogout }) {
                   </div>
                 </button>
 
-                {/* IN FIELD */}
                 <button
                   onClick={() => onCadreClick("IN_FIELD")}
                   className={`min-w-[230px] px-5 py-2 rounded-2xl shadow-lg
@@ -659,7 +649,6 @@ export default function DashboardSinglePage({ onLogout }) {
                   </div>
                 </button>
 
-                {/* EX CADRE */}
                 <button
                   onClick={() => onCadreClick("EX_CADRE")}
                   className={`min-w-[230px] px-5 py-2 rounded-2xl shadow-lg
@@ -682,10 +671,17 @@ export default function DashboardSinglePage({ onLogout }) {
             </div>
           </div>
 
-          {/* ✅ Layout updated: left = narrow, right = wide */}
+          {/* ✅ Layout */}
           <div className="grid grid-cols-12 gap-3">
-            {/* LEFT (designation) */}
-            <div className="col-span-12 xl:col-span-3 bg-white/80 backdrop-blur border border-slate-200/60 rounded-2xl p-2 shadow-sm">
+            {/* LEFT */}
+            <div className="col-span-12 xl:col-span-3 bg-white/80 backdrop-blur border border-slate-200/60 rounded-2xl p-2 shadow-sm relative">
+              {/* ✅ left loader */}
+              {loadingLeft && (
+                <div className="absolute inset-0 z-10 rounded-2xl bg-slate-900/50 flex items-center justify-center">
+                  <Spinner label="Loading designations..." />
+                </div>
+              )}
+
               <div className="flex items-center justify-between mb-2">
                 <div className="leading-tight">
                   <div className="text-[13px] font-extrabold text-slate-800 tracking-tight">
@@ -731,15 +727,16 @@ export default function DashboardSinglePage({ onLogout }) {
                       ALL
                     </div>
                     <div className="text-[20px] mt-1 leading-none">
-                      {loadingLeft
-                        ? 0
-                        : selectedDistrict
-                          ? totalLeft
-                          : selectedCadre === "ALL"
-                            ? totalOverall
-                            : selectedCadre === "IN_FIELD"
-                              ? totalInField
-                              : totalExCadre}
+                      {selectedDistrict
+                        ? designationTiles.reduce(
+                            (s, t) => s + toNumber(t.count),
+                            0,
+                          )
+                        : selectedCadre === "ALL"
+                          ? totalOverall
+                          : selectedCadre === "IN_FIELD"
+                            ? totalInField
+                            : totalExCadre}
                     </div>
                   </div>
 
@@ -752,7 +749,7 @@ export default function DashboardSinglePage({ onLogout }) {
                   </button>
                 </div>
 
-                {/* Designation tiles */}
+                {/* tiles */}
                 {designationTiles.map((t, idx) => {
                   const key = t.id ?? t.label ?? idx;
                   const bg = colorById(key, TILE_COLORS);
@@ -795,8 +792,15 @@ export default function DashboardSinglePage({ onLogout }) {
               </div>
             </div>
 
-            {/* RIGHT (district) */}
-            <div className="col-span-12 xl:col-span-9 bg-white/80 backdrop-blur border border-slate-200/60 rounded-2xl p-4 shadow-sm">
+            {/* RIGHT */}
+            <div className="col-span-12 xl:col-span-9 bg-white/80 backdrop-blur border border-slate-200/60 rounded-2xl p-4 shadow-sm relative">
+              {/* ✅ right loader */}
+              {loadingRight && (
+                <div className="absolute inset-0 z-10 rounded-2xl bg-slate-900/45 flex items-center justify-center">
+                  <Spinner label="Loading districts..." />
+                </div>
+              )}
+
               <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="leading-tight">
                   <div className="font-extrabold text-slate-800 text-[18px]">

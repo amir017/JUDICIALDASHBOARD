@@ -1,14 +1,23 @@
-// OfficerProfilePage.jsx
-
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Calendar, IdCard, Phone, MapPin, Home } from "lucide-react";
 import Layout from "./Layout";
 import Api from "../API/Api";
 
 import PostingTransfersTab from "../pages/officer/tabs/PostingTransfersTab";
+import PostingHistoryTab from "../pages/officer/tabs/PostingHistoryTab";
 import QualificationsTab from "../pages/officer/tabs/QualificationsTab";
 import LeavesTab from "../pages/officer/tabs/LeavesTab";
+
+import SkillsTab from "../pages/officer/tabs/SkillsTab";
+import PublicationsTab from "../pages/officer/tabs/PublicationsTab";
+import GamesTab from "../pages/officer/tabs/GamesTab";
+import AchievementsTab from "../pages/officer/tabs/AchievementsTab";
+import ComplaintsTab from "../pages/officer/tabs/ComplaintsTab";
+import InquiryNTab from "../pages/officer/tabs/InquiryNTab";
+import ExamsTab from "../pages/officer/tabs/ExamsTab.jsx";
+import PerformanceTab from "../pages/officer/tabs/PerformanceTab.jsx";
+import ACRTab from "../pages/officer/tabs/ACRTab.jsx";
 
 import {
   safeText,
@@ -245,6 +254,8 @@ const WedlockProfileCard = ({
   postingRows,
   postingLoading,
   navigate,
+  location,
+  officerHeroGradient = "from-emerald-700 via-teal-600 to-sky-600",
 }) => {
   const spouseId = safeText(profile?.SPOUSE_OFFICERID);
   const spouseName = safeText(profile?.SPOUSE_OFFICERNAME);
@@ -276,15 +287,9 @@ const WedlockProfileCard = ({
 
   const same = isSameDistrict(currentPosting?.DISTRICTNAME, spouseDistrict);
 
-  // ✅ NOT DARK (bright premium gradient)
   const spouseHero = same
-    ? "from-sky-400 via-blue-400 to-indigo-400"
-    : "from-blue-300 via-indigo-300 to-purple-400";
-
-  const goToSpouse = () => {
-    // ✅ route to same page; change officerId via state
-    navigate(location.pathname, { state: { officerId: spouseId } });
-  };
+    ? officerHeroGradient
+    : "from-violet-600 via-purple-600 to-fuchsia-700";
 
   return (
     <div className="rounded-2xl overflow-hidden border shadow-sm bg-white/80 backdrop-blur">
@@ -317,7 +322,6 @@ const WedlockProfileCard = ({
               {spouseDesig}
             </div>
 
-            {/* ✅ NEW BUTTON */}
             <button
               type="button"
               onClick={() =>
@@ -381,34 +385,425 @@ export default function OfficerProfilePage({ onLogout }) {
   const [historyLoading, setHistoryLoading] = useState(true);
 
   const [qualRows, setQualRows] = useState([]);
+  const [qualLoading, setQualLoading] = useState(false);
+
   const [leaveRows, setLeaveRows] = useState([]);
   const [leaveYearRows, setLeaveYearRows] = useState([]);
+  const [leaveLoading, setLeaveLoading] = useState(false);
+  const [leaveYearLoading, setLeaveYearLoading] = useState(false);
 
-  const [activeTab, setActiveTab] = useState("posting");
+  const [skillRows, setSkillRows] = useState([]);
+  const [skillLoading, setSkillLoading] = useState(false);
 
-  /* ---------------- API Calls ---------------- */
+  const [publicationRows, setPublicationRows] = useState([]);
+  const [publicationLoading, setPublicationLoading] = useState(false);
+
+  const [gameRows, setGameRows] = useState([]);
+  const [gameLoading, setGameLoading] = useState(false);
+
+  const [achievementRows, setAchievementRows] = useState([]);
+  const [achievementLoading, setAchievementLoading] = useState(false);
+
+  const [complaintRows, setComplaintRows] = useState([]);
+  const [complaintLoading, setComplaintLoading] = useState(false);
+
+  const [inquiryNRows, setInquiryNRows] = useState([]);
+  const [inquiryNLoading, setInquiryNLoading] = useState(false);
+
+  const [inquiryNHearingRows, setInquiryNHearingRows] = useState([]);
+  const [inquiryNHearingLoading, setInquiryNHearingLoading] = useState(false);
+
+  const [inquiryNDecisionRows, setInquiryNDecisionRows] = useState([]);
+  const [inquiryNDecisionLoading, setInquiryNDecisionLoading] = useState(false);
+
+  const [examAttemptRows, setExamAttemptRows] = useState([]);
+  const [examAttemptLoading, setExamAttemptLoading] = useState(false);
+
+  const [examAttemptDetailRows, setExamAttemptDetailRows] = useState([]);
+  const [examAttemptDetailLoading, setExamAttemptDetailLoading] =
+    useState(false);
+
+  const [examResultRows, setExamResultRows] = useState([]);
+  const [examResultLoading, setExamResultLoading] = useState(false);
+
+  const [examRemedyRows, setExamRemedyRows] = useState([]);
+  const [examRemedyLoading, setExamRemedyLoading] = useState(false);
+
+  const [acrRows, setAcrRows] = useState([]);
+  const [acrLoading, setAcrLoading] = useState(false);
+
+  const [activeTab, setActiveTab] = useState("postingAnalysis");
+
+  /** Which officerId each lazy tab last loaded for (cleared when officerId changes). */
+  const tabDataOfficerRef = useRef({});
+
+  useEffect(() => {
+    tabDataOfficerRef.current = {};
+    setQualRows([]);
+    setQualLoading(false);
+    setLeaveRows([]);
+    setLeaveYearRows([]);
+    setLeaveLoading(false);
+    setLeaveYearLoading(false);
+    setSkillRows([]);
+    setSkillLoading(false);
+    setPublicationRows([]);
+    setPublicationLoading(false);
+    setGameRows([]);
+    setGameLoading(false);
+    setAchievementRows([]);
+    setAchievementLoading(false);
+    setComplaintRows([]);
+    setComplaintLoading(false);
+    setInquiryNRows([]);
+    setInquiryNLoading(false);
+    setInquiryNHearingRows([]);
+    setInquiryNHearingLoading(false);
+    setInquiryNDecisionRows([]);
+    setInquiryNDecisionLoading(false);
+    setExamAttemptRows([]);
+    setExamAttemptLoading(false);
+    setExamAttemptDetailRows([]);
+    setExamAttemptDetailLoading(false);
+    setExamResultRows([]);
+    setExamResultLoading(false);
+    setExamRemedyRows([]);
+    setExamRemedyLoading(false);
+    setAcrRows([]);
+    setAcrLoading(false);
+  }, [officerId]);
+
+  /* ---------------- API: profile + posting only on entry (default tabs need both) ---------------- */
 
   useEffect(() => {
     let mounted = true;
+
     (async () => {
-      if (!officerId) return;
-      const res = await Api.getOfficerProfile({ officerId });
-      if (mounted) setProfile(res ?? null);
+      try {
+        if (!officerId) {
+          setProfile(null);
+          return;
+        }
+
+        const res = await Api.getOfficerProfile({ officerId });
+        if (!mounted) return;
+        setProfile(res ?? null);
+      } catch (e) {
+        console.error("OfficerProfilePage profile load error:", e);
+        if (!mounted) return;
+        setProfile(null);
+      }
     })();
-    return () => (mounted = false);
+
+    return () => {
+      mounted = false;
+    };
   }, [officerId]);
 
   useEffect(() => {
     let mounted = true;
     (async () => {
-      setHistoryLoading(true);
-      if (!officerId) return;
-      const rows = await Api.getOfficerPostingHistory({ officerId });
-      if (mounted) setHistoryRows(rows || []);
-      setHistoryLoading(false);
+      try {
+        setHistoryLoading(true);
+        if (!officerId) {
+          setHistoryRows([]);
+          return;
+        }
+        const rows = await Api.getOfficerPostingHistory({ officerId });
+        if (!mounted) return;
+        setHistoryRows(Array.isArray(rows) ? rows : []);
+      } catch (e) {
+        console.error("OfficerProfilePage posting history load error:", e);
+        if (!mounted) return;
+        setHistoryRows([]);
+      } finally {
+        if (mounted) setHistoryLoading(false);
+      }
     })();
-    return () => (mounted = false);
+    return () => {
+      mounted = false;
+    };
   }, [officerId]);
+
+  /* ---------------- API: lazy per tab (avoids ~15 parallel calls on every open) ---------------- */
+
+  useEffect(() => {
+    if (!officerId || activeTab !== "qual") return;
+    if (tabDataOfficerRef.current.qual === officerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setQualLoading(true);
+        const rows = await Api.getOfficerQualifications({ officerId });
+        if (cancelled) return;
+        setQualRows(Array.isArray(rows) ? rows : []);
+        tabDataOfficerRef.current.qual = officerId;
+      } catch (e) {
+        console.error("OfficerProfilePage qualifications load error:", e);
+        if (!cancelled) setQualRows([]);
+      } finally {
+        if (!cancelled) setQualLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [officerId, activeTab]);
+
+  useEffect(() => {
+    if (!officerId || activeTab !== "leaves") return;
+    if (tabDataOfficerRef.current.leaves === officerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setLeaveLoading(true);
+        setLeaveYearLoading(true);
+        const [rows, yrows] = await Promise.all([
+          Api.getOfficerLeaves({ officerId }),
+          Api.getOfficerLeavesYearly({ officerId }),
+        ]);
+        if (cancelled) return;
+        setLeaveRows(Array.isArray(rows) ? rows : []);
+        setLeaveYearRows(Array.isArray(yrows) ? yrows : []);
+        tabDataOfficerRef.current.leaves = officerId;
+      } catch (e) {
+        console.error("OfficerProfilePage leaves load error:", e);
+        if (!cancelled) {
+          setLeaveRows([]);
+          setLeaveYearRows([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLeaveLoading(false);
+          setLeaveYearLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [officerId, activeTab]);
+
+  useEffect(() => {
+    if (!officerId || activeTab !== "skills") return;
+    if (tabDataOfficerRef.current.skills === officerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setSkillLoading(true);
+        const rows = await Api.getOfficerSkills({ officerId });
+        if (cancelled) return;
+        setSkillRows(Array.isArray(rows) ? rows : []);
+        tabDataOfficerRef.current.skills = officerId;
+      } catch (e) {
+        console.error("OfficerProfilePage skills load error:", e);
+        if (!cancelled) setSkillRows([]);
+      } finally {
+        if (!cancelled) setSkillLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [officerId, activeTab]);
+
+  useEffect(() => {
+    if (!officerId || activeTab !== "publications") return;
+    if (tabDataOfficerRef.current.publications === officerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setPublicationLoading(true);
+        const rows = await Api.getOfficerPublications({ officerId });
+        if (cancelled) return;
+        setPublicationRows(Array.isArray(rows) ? rows : []);
+        tabDataOfficerRef.current.publications = officerId;
+      } catch (e) {
+        console.error("OfficerProfilePage publications load error:", e);
+        if (!cancelled) setPublicationRows([]);
+      } finally {
+        if (!cancelled) setPublicationLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [officerId, activeTab]);
+
+  useEffect(() => {
+    if (!officerId || activeTab !== "games") return;
+    if (tabDataOfficerRef.current.games === officerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setGameLoading(true);
+        const rows = await Api.getOfficerGames({ officerId });
+        if (cancelled) return;
+        setGameRows(Array.isArray(rows) ? rows : []);
+        tabDataOfficerRef.current.games = officerId;
+      } catch (e) {
+        console.error("OfficerProfilePage games load error:", e);
+        if (!cancelled) setGameRows([]);
+      } finally {
+        if (!cancelled) setGameLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [officerId, activeTab]);
+
+  useEffect(() => {
+    if (!officerId || activeTab !== "achievements") return;
+    if (tabDataOfficerRef.current.achievements === officerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setAchievementLoading(true);
+        const rows = await Api.getOfficerAchievements({ officerId });
+        if (cancelled) return;
+        setAchievementRows(Array.isArray(rows) ? rows : []);
+        tabDataOfficerRef.current.achievements = officerId;
+      } catch (e) {
+        console.error("OfficerProfilePage achievements load error:", e);
+        if (!cancelled) setAchievementRows([]);
+      } finally {
+        if (!cancelled) setAchievementLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [officerId, activeTab]);
+
+  useEffect(() => {
+    if (!officerId || activeTab !== "complaints") return;
+    if (tabDataOfficerRef.current.complaints === officerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setComplaintLoading(true);
+        const rows = await Api.getOfficerComplaints({ officerId });
+        if (cancelled) return;
+        setComplaintRows(Array.isArray(rows) ? rows : []);
+        tabDataOfficerRef.current.complaints = officerId;
+      } catch (e) {
+        console.error("OfficerProfilePage complaints load error:", e);
+        if (!cancelled) setComplaintRows([]);
+      } finally {
+        if (!cancelled) setComplaintLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [officerId, activeTab]);
+
+  useEffect(() => {
+    if (!officerId || activeTab !== "inquiryN") return;
+    if (tabDataOfficerRef.current.inquiryN === officerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setInquiryNLoading(true);
+        setInquiryNHearingLoading(true);
+        setInquiryNDecisionLoading(true);
+        const [main, hearing, decision] = await Promise.all([
+          Api.getOfficerInquiryN({ officerId }),
+          Api.getOfficerInquiryNHearing({ officerId }),
+          Api.getOfficerInquiryNDecision({ officerId }),
+        ]);
+        if (cancelled) return;
+        setInquiryNRows(Array.isArray(main) ? main : []);
+        setInquiryNHearingRows(Array.isArray(hearing) ? hearing : []);
+        setInquiryNDecisionRows(Array.isArray(decision) ? decision : []);
+        tabDataOfficerRef.current.inquiryN = officerId;
+      } catch (e) {
+        console.error("OfficerProfilePage inquiryN load error:", e);
+        if (!cancelled) {
+          setInquiryNRows([]);
+          setInquiryNHearingRows([]);
+          setInquiryNDecisionRows([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setInquiryNLoading(false);
+          setInquiryNHearingLoading(false);
+          setInquiryNDecisionLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [officerId, activeTab]);
+
+  useEffect(() => {
+    if (!officerId || activeTab !== "exams") return;
+    if (tabDataOfficerRef.current.exams === officerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setExamAttemptLoading(true);
+        setExamAttemptDetailLoading(true);
+        setExamResultLoading(true);
+        setExamRemedyLoading(true);
+        const [attempts, details, results, remedy] = await Promise.all([
+          Api.getOfficerExamAttempts({ officerId }),
+          Api.getOfficerExamAttemptDetails({ officerId }),
+          Api.getOfficerExamResults({ officerId }),
+          Api.getOfficerExamRemedy({ officerId }),
+        ]);
+        if (cancelled) return;
+        setExamAttemptRows(Array.isArray(attempts) ? attempts : []);
+        setExamAttemptDetailRows(Array.isArray(details) ? details : []);
+        setExamResultRows(Array.isArray(results) ? results : []);
+        setExamRemedyRows(Array.isArray(remedy) ? remedy : []);
+        tabDataOfficerRef.current.exams = officerId;
+      } catch (e) {
+        console.error("OfficerProfilePage exams load error:", e);
+        if (!cancelled) {
+          setExamAttemptRows([]);
+          setExamAttemptDetailRows([]);
+          setExamResultRows([]);
+          setExamRemedyRows([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setExamAttemptLoading(false);
+          setExamAttemptDetailLoading(false);
+          setExamResultLoading(false);
+          setExamRemedyLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [officerId, activeTab]);
+
+  useEffect(() => {
+    if (!officerId || activeTab !== "acr") return;
+    if (tabDataOfficerRef.current.acr === officerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setAcrLoading(true);
+        const rows = await Api.getOfficerACR({ officerId });
+        if (cancelled) return;
+        setAcrRows(Array.isArray(rows) ? rows : []);
+        tabDataOfficerRef.current.acr = officerId;
+      } catch (e) {
+        console.error("OfficerProfilePage ACR load error:", e);
+        if (!cancelled) setAcrRows([]);
+      } finally {
+        if (!cancelled) setAcrLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [officerId, activeTab]);
 
   /* ---------------- Derived ---------------- */
 
@@ -435,15 +830,11 @@ export default function OfficerProfilePage({ onLogout }) {
     profile?.ADDRESS || profile?.HOMEADDRESS || profile?.PERMANENTADDRESS,
   );
 
-  /* ---------------- UI ---------------- */
-
   return (
     <Layout onLogout={onLogout}>
       <div className="min-h-[calc(100vh-88px)] bg-gradient-to-br from-slate-50 via-emerald-50/40 to-sky-50/40 p-3">
         <div className="grid grid-cols-1 lg:grid-cols-[30%_70%] gap-3">
-          {/* LEFT SIDE */}
           <div className="space-y-3">
-            {/* PROFILE CARD */}
             <div className="rounded-2xl overflow-hidden border shadow-sm bg-white/80 backdrop-blur">
               <div className={`relative bg-gradient-to-r ${palette.hero} p-3`}>
                 <button
@@ -499,61 +890,186 @@ export default function OfficerProfilePage({ onLogout }) {
               </div>
             </div>
 
-            {/* CURRENT POSTING */}
             <CurrentPostingBannerInline
               rows={historyRows}
               loading={historyLoading}
             />
 
-            {/* SPOUSE CARD + BUTTON */}
             <WedlockProfileCard
               profile={profile}
               postingRows={historyRows}
               postingLoading={historyLoading}
               navigate={navigate}
+              location={location}
+              officerHeroGradient={palette.hero}
             />
           </div>
 
-          {/* RIGHT SIDE (tabs) */}
           <div className="space-y-3">
             <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-              <div className="p-3 bg-gradient-to-r from-emerald-700 via-teal-600 to-sky-600 text-white flex justify-between">
-                <div className="font-semibold">Details</div>
-                <div className="flex gap-2">
+              <div className="p-3 bg-gradient-to-r from-emerald-700 via-teal-600 to-sky-600 text-white">
+                <div className="font-semibold mb-2">Details</div>
+
+                <div className="flex gap-2 flex-wrap">
                   <ToggleBtn
-                    active={activeTab === "posting"}
-                    onClick={() => setActiveTab("posting")}
+                    active={activeTab === "postingAnalysis"}
+                    onClick={() => setActiveTab("postingAnalysis")}
                   >
-                    Posting
+                    Posting Analysis
                   </ToggleBtn>
+
+                  <ToggleBtn
+                    active={activeTab === "postingHistory"}
+                    onClick={() => setActiveTab("postingHistory")}
+                  >
+                    Posting History
+                  </ToggleBtn>
+
                   <ToggleBtn
                     active={activeTab === "qual"}
                     onClick={() => setActiveTab("qual")}
                   >
                     Qualifications
                   </ToggleBtn>
+
+                  <ToggleBtn
+                    active={activeTab === "skills"}
+                    onClick={() => setActiveTab("skills")}
+                  >
+                    Skills
+                  </ToggleBtn>
+
+                  <ToggleBtn
+                    active={activeTab === "publications"}
+                    onClick={() => setActiveTab("publications")}
+                  >
+                    Publications
+                  </ToggleBtn>
+
+                  <ToggleBtn
+                    active={activeTab === "games"}
+                    onClick={() => setActiveTab("games")}
+                  >
+                    Games
+                  </ToggleBtn>
+
+                  <ToggleBtn
+                    active={activeTab === "achievements"}
+                    onClick={() => setActiveTab("achievements")}
+                  >
+                    Achievements
+                  </ToggleBtn>
+
+                  <ToggleBtn
+                    active={activeTab === "complaints"}
+                    onClick={() => setActiveTab("complaints")}
+                  >
+                    Complaints
+                  </ToggleBtn>
+
+                  <ToggleBtn
+                    active={activeTab === "performance"}
+                    onClick={() => setActiveTab("performance")}
+                  >
+                    Performance
+                  </ToggleBtn>
+
+                  <ToggleBtn
+                    active={activeTab === "inquiryN"}
+                    onClick={() => setActiveTab("inquiryN")}
+                  >
+                    Inquiry 16(3)
+                  </ToggleBtn>
+
+                  <ToggleBtn
+                    active={activeTab === "exams"}
+                    onClick={() => setActiveTab("exams")}
+                  >
+                    Exams
+                  </ToggleBtn>
+
                   <ToggleBtn
                     active={activeTab === "leaves"}
                     onClick={() => setActiveTab("leaves")}
                   >
                     Leaves
                   </ToggleBtn>
+
+                  <ToggleBtn
+                    active={activeTab === "acr"}
+                    onClick={() => setActiveTab("acr")}
+                  >
+                    ACR
+                  </ToggleBtn>
                 </div>
               </div>
             </div>
 
             <div className="w-full overflow-x-auto">
-              {activeTab === "posting" ? (
+              {activeTab === "postingAnalysis" ? (
                 <PostingTransfersTab
                   historyRows={historyRows}
                   historyLoading={historyLoading}
                 />
+              ) : activeTab === "postingHistory" ? (
+                <PostingHistoryTab
+                  historyRows={historyRows}
+                  historyLoading={historyLoading}
+                />
               ) : activeTab === "qual" ? (
-                <QualificationsTab qualRows={qualRows} />
+                <QualificationsTab
+                  qualRows={qualRows}
+                  qualLoading={qualLoading}
+                />
+              ) : activeTab === "skills" ? (
+                <SkillsTab skillRows={skillRows} skillLoading={skillLoading} />
+              ) : activeTab === "publications" ? (
+                <PublicationsTab
+                  publicationRows={publicationRows}
+                  publicationLoading={publicationLoading}
+                />
+              ) : activeTab === "games" ? (
+                <GamesTab gameRows={gameRows} gameLoading={gameLoading} />
+              ) : activeTab === "achievements" ? (
+                <AchievementsTab
+                  achievementRows={achievementRows}
+                  achievementLoading={achievementLoading}
+                />
+              ) : activeTab === "complaints" ? (
+                <ComplaintsTab
+                  complaintRows={complaintRows}
+                  complaintLoading={complaintLoading}
+                />
+              ) : activeTab === "performance" ? (
+                <PerformanceTab pfNoFromProfile={profile?.PFNO} />
+              ) : activeTab === "inquiryN" ? (
+                <InquiryNTab
+                  inquiryNRows={inquiryNRows}
+                  inquiryNLoading={inquiryNLoading}
+                  inquiryNHearingRows={inquiryNHearingRows}
+                  inquiryNHearingLoading={inquiryNHearingLoading}
+                  inquiryNDecisionRows={inquiryNDecisionRows}
+                  inquiryNDecisionLoading={inquiryNDecisionLoading}
+                />
+              ) : activeTab === "exams" ? (
+                <ExamsTab
+                  examAttemptRows={examAttemptRows}
+                  examAttemptLoading={examAttemptLoading}
+                  examAttemptDetailRows={examAttemptDetailRows}
+                  examAttemptDetailLoading={examAttemptDetailLoading}
+                  examResultRows={examResultRows}
+                  examResultLoading={examResultLoading}
+                  examRemedyRows={examRemedyRows}
+                  examRemedyLoading={examRemedyLoading}
+                />
+              ) : activeTab === "acr" ? (
+                <ACRTab acrRows={acrRows} acrLoading={acrLoading} />
               ) : (
                 <LeavesTab
                   leaveRows={leaveRows}
                   leaveYearRows={leaveYearRows}
+                  leaveLoading={leaveLoading}
+                  leaveYearLoading={leaveYearLoading}
                 />
               )}
             </div>

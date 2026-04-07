@@ -1,3 +1,5 @@
+import { intervalToDuration } from "date-fns";
+
 // src/components/officerUtils/officerFormat.js
 
 export const toDDMMYYYY = (val) => {
@@ -67,6 +69,21 @@ export const ymdFromDays = (totalDays) => {
 
 export const fmtYMDLong = (totalDays) => {
   const { years, months, days } = ymdFromDays(totalDays);
+  return `${years}y ${months}m ${days}d`;
+};
+
+/** Calendar-accurate years/months/days between two dates (for career span, not rough day/365). */
+export const fmtCalendarSpan = (start, end) => {
+  if (!start || !end) return "—";
+  const s = start instanceof Date ? start : new Date(start);
+  const e = end instanceof Date ? end : new Date(end);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime()) || s > e) {
+    return "—";
+  }
+  const { years = 0, months = 0, days = 0 } = intervalToDuration({
+    start: s,
+    end: e,
+  });
   return `${years}y ${months}m ${days}d`;
 };
 
