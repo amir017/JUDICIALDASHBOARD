@@ -1,4 +1,5 @@
 import React from "react";
+import { BookOpen } from "lucide-react";
 import GenericRecordsTab from "./GenericRecordsTab";
 
 export default function PublicationsTab({
@@ -11,6 +12,7 @@ export default function PublicationsTab({
       subtitle="Books, journals and publications"
       rows={publicationRows}
       loading={publicationLoading}
+      icon={BookOpen}
       primaryField="TITLE"
       fields={[
         { key: "PUBLICATION_TYPE", label: "Type" },
@@ -21,6 +23,7 @@ export default function PublicationsTab({
         { key: "ROLE_TYPE", label: "Role" },
         { key: "SCOPE_TYPE", label: "Scope" },
       ]}
+      tone="amber"
     />
   );
 }

@@ -2,8 +2,21 @@ import axios from "axios";
 
 class Api {
   constructor() {
-    const API_BASE_URL =
-      import.meta.env.VITE_API_BASE_URL || "http://localhost:5001/api";
+    const runtimeBase =
+      (typeof window !== "undefined" && window.__API_BASE_URL__) ||
+      (typeof window !== "undefined" && window.__APP_CONFIG__?.API_BASE_URL) ||
+      "";
+
+    const envBase = import.meta.env.VITE_API_BASE_URL || "";
+
+    // Fallback for production deployments that open by IP/hostname but forgot to rebuild with env.
+    // Example: http://10.3.0.101:5173  ->  http://10.3.0.101:5001/api
+    const inferredBase =
+      typeof window !== "undefined" && window.location?.hostname
+        ? `${window.location.protocol}//${window.location.hostname}:5001/api`
+        : "";
+
+    const API_BASE_URL = (runtimeBase || envBase || inferredBase).replace(/\/+$/, "");
     this.axiosInstance = axios.create({
       baseURL: API_BASE_URL,
       timeout: 100000000,
@@ -150,6 +163,11 @@ class Api {
     });
     return res.data;
   }
+  /**
+   * Posting history: when joined to designation (e.g. SUBJUDICARY), expose per-row
+   * `MATUREPERIOD` and `SHORTPERIOD` (days) so posting analytics can use designation rules:
+   * SELECT d.DESIGNATIONID, d.DESIGNATIONDESC, d.MATUREPERIOD, d.SHORTPERIOD FROM designation d
+   */
   async getOfficerPostingHistory({ officerId }) {
     const res = await this.axiosInstance.get("/dj/getOfficerPostingHistory", {
       params: { officerId },
@@ -204,8 +222,40 @@ class Api {
     return res.data;
   }
 
+  /**
+   * Officer trainings — backend should run against SUBJUDICARY (or equivalent), e.g.:
+   * SELECT t.OFFICERID, t.COURSE_NAME, t.RECEIVED_FROM, t.FROM_DATE, t.TO_DATE,
+   *        tp.TPROVIDER_NAME, c.CITYNAME, v.COUNTRYNAME
+   * FROM TRAINING_COURSES t
+   * LEFT JOIN visited_country_names v ON v.COUNTRY_ID = t.COUNTRYID
+   * LEFT JOIN visited_city_names c ON c.CITY_ID = t.CITYID
+   * LEFT JOIN training_provider_type tp ON tp.TPROVIDER_TYPE_ID = t.TPROVIDER_TYPE_ID
+   * WHERE t.OFFICERID = :officerId
+   */
   async getOfficerTrainings({ officerId }) {
     const res = await this.axiosInstance.get("/dj/getOfficerTrainings", {
+      params: {
+        officerId,
+        OFFICER_ID: officerId,
+      },
+    });
+    return res.data;
+  }
+
+  /**
+   * Brother/sister relationship records (SUBJUDICARY), e.g.:
+   * SELECT b.OFFICER_ID, b.BS_NAME AS NAME, r.RELATION_TYPE AS RELATION
+   * FROM brother_sister b
+   * LEFT JOIN relation_type r ON b.RELATIONTYPE = r.RELATION_TYPE
+   *
+   * Children can be included in same response shape as well, e.g.:
+   * SELECT c.OFFICER_ID, c.CHILD_NAME AS NAME, 'Child' AS RELATION,
+   *        c.EDUCATION, c.INSTITUTION
+   * FROM children c
+   * WHERE b.OFFICER_ID = :officerId
+   */
+  async getOfficerRelationships({ officerId }) {
+    const res = await this.axiosInstance.get("/dj/getOfficerRelationships", {
       params: { officerId },
     });
     return res.data;
@@ -248,6 +298,14 @@ class Api {
 
   async getOfficerInquiryN({ officerId }) {
     const res = await this.axiosInstance.get("/dj/getOfficerInquiryN", {
+      params: { officerId },
+    });
+    return res.data;
+  }
+
+  /** jofficerinquiry + hearing + decision; link to complaints via COMPLAINT_NO */
+  async getOfficerInquiryJoined({ officerId }) {
+    const res = await this.axiosInstance.get("/dj/getOfficerInquiryJoined", {
       params: { officerId },
     });
     return res.data;
@@ -310,6 +368,15 @@ class Api {
     const encoded = encodeURIComponent(String(personalNo || "").trim());
     const res = await this.axiosInstance.get(
       `/complaint/performance-summary/${encoded}`,
+    );
+    return res.data;
+  }
+
+  /** Complaint schema — COMPLAINT rows + posting district/tehsil by PERSONAL# */
+  async getComplaintSchemaComplaints({ personalNo }) {
+    const encoded = encodeURIComponent(String(personalNo || "").trim());
+    const res = await this.axiosInstance.get(
+      `/complaint/complaint-records/${encoded}`,
     );
     return res.data;
   }

@@ -19,20 +19,11 @@ import {
   Zap,
 } from "lucide-react";
 import Api from "../../../API/Api";
-
-const SLICE_COLORS = [
-  "#0f766e",
-  "#0369a1",
-  "#4f46e5",
-  "#6d28d9",
-  "#a21caf",
-  "#be123c",
-  "#c2410c",
-  "#b45309",
-  "#15803d",
-  "#0e7490",
-  "#4338ca",
-];
+import {
+  PERFORMANCE_SLICE_COLORS as SLICE_COLORS,
+  DONUT_PIE_PROPS,
+  DONUT_CELL_STROKE,
+} from "../officerUtils/chartColors.js";
 
 const SESSIONS_LABELS = {
   MURDERCASES: "Murder",
@@ -837,9 +828,7 @@ const TypePerformanceBlock = memo(function TypePerformanceBlock({
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  innerRadius="42%"
-                  outerRadius="88%"
-                  paddingAngle={2}
+                  {...DONUT_PIE_PROPS}
                   labelLine={false}
                   label={renderPieLabel}
                 >
@@ -847,8 +836,7 @@ const TypePerformanceBlock = memo(function TypePerformanceBlock({
                     <Cell
                       key={i}
                       fill={SLICE_COLORS[i % SLICE_COLORS.length]}
-                      stroke="#fff"
-                      strokeWidth={2}
+                      {...DONUT_CELL_STROKE}
                     />
                   ))}
                 </Pie>

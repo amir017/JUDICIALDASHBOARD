@@ -520,8 +520,10 @@ export default function OfficerDetailPage({ onLogout }) {
             return String(getDesigDesc(r) ?? "");
           case "designationId":
             return String(getDesigId(r) ?? "");
+          case "postingDistrict":
           case "district":
             return String(r.DISTRICTNAME ?? "");
+          case "postingTehsil":
           case "tehsil":
             return String(r.SUBDIVNAME ?? "");
           case "cadre":
@@ -711,30 +713,39 @@ export default function OfficerDetailPage({ onLogout }) {
     "py-2 px-3 align-top text-slate-800 font-semibold border-b border-slate-200/60 whitespace-nowrap";
   const tdOfficer = `${tdBase} font-extrabold text-slate-900`;
 
+  /** Toolbar strip aligned with table header gradient */
+  const gridToolbarClass =
+    "flex-none bg-gradient-to-r from-sky-600 via-indigo-700 to-blue-700 text-xs font-bold text-white shadow-sm";
+  /** Native `<select>` lists need solid light background or options are unreadable on Windows */
+  const gridToolbarSelectClass =
+    "max-w-[11rem] rounded-md border border-white/40 bg-white px-1.5 py-1 text-[11px] font-bold text-slate-800 shadow-sm outline-none focus:ring-2 focus:ring-white/70 [&>option]:bg-white [&>option]:text-slate-900";
+  const gridToolbarInputClass =
+    "min-w-0 rounded-md border border-white/40 bg-white/95 px-1.5 py-1 text-[11px] font-semibold text-slate-800 shadow-sm outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-white/70";
+
   const pageTitle = districtName ? `District: ${districtName}` : designation;
 
   return (
     <Layout onLogout={onLogout}>
-      <div className="relative bg-slate-50 px-4 py-3 h-[calc(100vh-88px)] overflow-hidden">
+      <div className="relative bg-slate-50 px-4 py-2 h-[calc(100vh-88px)] overflow-hidden">
         <div className="pointer-events-none absolute -top-24 -right-24 h-80 w-80 rounded-full bg-sky-200/40 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-24 h-80 w-80 rounded-full bg-amber-200/30 blur-3xl" />
 
-        <div className="relative z-10 mb-3 flex items-center">
+        <div className="relative z-10 mb-2 flex items-center gap-2">
           <button
             onClick={() => navigate(-1)}
-            className="px-3 py-2 rounded-xl bg-white/80 border border-slate-200 text-slate-800 font-bold shadow-sm hover:bg-white"
+            className="px-2.5 py-1.5 rounded-lg bg-white/80 border border-slate-200 text-slate-800 text-xs font-bold shadow-sm hover:bg-white"
           >
             Back
           </button>
 
-          <div className="flex-1 text-center">
-            <div className="text-[11px] text-slate-500 font-bold tracking-wider">
+          <div className="flex-1 min-w-0 text-center px-1">
+            <div className="text-[9px] text-slate-500 font-bold tracking-wider uppercase">
               Officer Details
             </div>
-            <div className="text-lg md:text-xl font-extrabold text-slate-900">
+            <div className="text-sm md:text-base font-extrabold text-slate-900 truncate">
               {pageTitle}
             </div>
-            <div className="text-[11px] text-slate-500 font-bold mt-0.5">
+            <div className="text-[9px] text-slate-500 font-bold mt-0.5 truncate">
               Cadre:{" "}
               {selectedCadre ??
                 (cadre === "ALL"
@@ -745,11 +756,13 @@ export default function OfficerDetailPage({ onLogout }) {
             </div>
           </div>
 
-          <div className="w-[76px]" />
+          <div className="w-[64px] shrink-0" />
         </div>
 
-        <div className="relative z-10 bg-white/80 backdrop-blur border border-slate-200/60 rounded-2xl p-4 shadow-sm h-[calc(100%-52px)] flex flex-col min-h-0">
-          <div className="mb-3 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+        <div className="relative z-10 bg-white/80 backdrop-blur border border-slate-200/60 rounded-2xl p-3 shadow-sm h-[calc(100%-44px)] flex flex-col min-h-0 gap-2">
+          {/* Summary tiles: cap at 30% of card so the grid keeps ~70% */}
+          <div className="max-h-[30%] min-h-0 shrink-0 overflow-y-auto flex flex-col gap-3">
+          <div className="rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm shrink-0">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div>
                 <div className="text-xs font-bold tracking-wide text-sky-700 uppercase">
@@ -839,7 +852,7 @@ export default function OfficerDetailPage({ onLogout }) {
           </div>
 
           {selectedDistrict && (
-            <div className="mb-3 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm">
+            <div className="rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm shrink-0">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div>
                   <div className="text-xs font-bold tracking-wide text-sky-700 uppercase">
@@ -956,24 +969,29 @@ export default function OfficerDetailPage({ onLogout }) {
               )}
             </div>
           )}
+          </div>
 
-          <div className="flex items-center justify-between gap-3 mb-3">
-            <div className="leading-tight">
-              <div className="font-extrabold text-slate-800">
+          {/* Grid + toolbar: fills remaining height (~70% when tiles use their cap) */}
+          <div className="flex-1 min-h-0 flex flex-col gap-0 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div
+            className={`${gridToolbarClass} flex flex-wrap items-center justify-between gap-1.5 px-2 py-1.5`}
+          >
+            <div className="leading-tight min-w-0">
+              <div className="text-[11px] font-extrabold tracking-tight">
                 {designationId === "ALL" && !districtName
                   ? "All Officers"
                   : "Officers"}
               </div>
-              <div className="text-[11px] text-slate-500">
-                {loading ? "Loading..." : `${filtered.length} records`}
+              <div className="text-[9px] font-bold text-white/80 uppercase tracking-wide">
+                {loading ? "Loading…" : `${filtered.length} records`}
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-1.5 min-w-0">
               <select
                 value={searchColumn}
                 onChange={(e) => setSearchColumn(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-white/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-200"
+                className={gridToolbarSelectClass}
                 title="Search column"
               >
                 <option value="all">All columns</option>
@@ -983,8 +1001,8 @@ export default function OfficerDetailPage({ onLogout }) {
                 <option value="cr">CRNo</option>
                 <option value="designation">Designation</option>
                 <option value="designationId">Designation ID</option>
-                <option value="district">District</option>
-                <option value="tehsil">Tehsil</option>
+                <option value="postingDistrict">Posting District</option>
+                <option value="postingTehsil">Posting Tehsil</option>
                 <option value="cadre">Cadre</option>
                 <option value="domicile">Domicile</option>
                 <option value="cnic">CNIC</option>
@@ -1003,19 +1021,20 @@ export default function OfficerDetailPage({ onLogout }) {
                     ? "Search in all columns…"
                     : "Search text…"
                 }
-                className="w-56 md:w-72 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-200"
+                className={`w-36 sm:w-44 md:min-w-[10rem] md:flex-1 md:max-w-sm ${gridToolbarInputClass}`}
               />
 
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-white/70 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-200"
+                className={`max-w-[min(100%,14rem)] sm:max-w-[min(100%,18rem)] ${gridToolbarSelectClass}`}
+                title="Sort order"
               >
                 <option value="designation_list">
                   Designation ID → Seniority
                 </option>
                 <option value="district_tehsil_list">
-                  D&SJ Tehsil First → Tehsil → Designation ID → Seniority
+                  D&SJ tehsil → desig. → seniority
                 </option>
                 <option value="desigId_asc">Designation ID ↑</option>
                 <option value="desigId_desc">Designation ID ↓</option>
@@ -1027,15 +1046,15 @@ export default function OfficerDetailPage({ onLogout }) {
                 <option value="name_za">Name Z–A</option>
                 <option value="pf_az">PFNo A–Z</option>
                 <option value="pf_za">PFNo Z–A</option>
-                <option value="posting district_az">District A–Z</option>
-                <option value="posting district_za">District Z–A</option>
+                <option value="district_az">District A–Z</option>
+                <option value="district_za">District Z–A</option>
                 <option value="dop_new">Posting Newest</option>
                 <option value="dop_old">Posting Oldest</option>
               </select>
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             <table className="table-fixed w-full text-xs">
               <thead className="sticky top-0 z-10">
                 <tr className="text-left">
@@ -1246,10 +1265,11 @@ export default function OfficerDetailPage({ onLogout }) {
             </table>
           </div>
 
-          <div className="mt-3 text-[11px] text-slate-500">
+          <div className="flex-none border-t border-slate-200/80 bg-slate-50/90 px-3 py-2 text-[11px] text-slate-500">
             Default sorting is Designation ID → Seniority. When a district is
             selected, sorting becomes D&SJ Tehsil First → Tehsil → Designation
             ID → Seniority.
+          </div>
           </div>
         </div>
       </div>

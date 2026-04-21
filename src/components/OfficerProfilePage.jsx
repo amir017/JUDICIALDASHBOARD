@@ -11,10 +11,12 @@ import LeavesTab from "../pages/officer/tabs/LeavesTab";
 
 import SkillsTab from "../pages/officer/tabs/SkillsTab";
 import PublicationsTab from "../pages/officer/tabs/PublicationsTab";
+import TrainingsTab from "../pages/officer/tabs/TrainingsTab";
+import RelationshipsTab from "../pages/officer/tabs/RelationshipsTab";
 import GamesTab from "../pages/officer/tabs/GamesTab";
 import AchievementsTab from "../pages/officer/tabs/AchievementsTab";
 import ComplaintsTab from "../pages/officer/tabs/ComplaintsTab";
-import InquiryNTab from "../pages/officer/tabs/InquiryNTab";
+import InquiryTab from "../pages/officer/tabs/InquiryTab";
 import ExamsTab from "../pages/officer/tabs/ExamsTab.jsx";
 import PerformanceTab from "../pages/officer/tabs/PerformanceTab.jsx";
 import ACRTab from "../pages/officer/tabs/ACRTab.jsx";
@@ -398,23 +400,16 @@ export default function OfficerProfilePage({ onLogout }) {
   const [publicationRows, setPublicationRows] = useState([]);
   const [publicationLoading, setPublicationLoading] = useState(false);
 
+  const [trainingRows, setTrainingRows] = useState([]);
+  const [trainingLoading, setTrainingLoading] = useState(false);
+  const [relationshipRows, setRelationshipRows] = useState([]);
+  const [relationshipLoading, setRelationshipLoading] = useState(false);
+
   const [gameRows, setGameRows] = useState([]);
   const [gameLoading, setGameLoading] = useState(false);
 
   const [achievementRows, setAchievementRows] = useState([]);
   const [achievementLoading, setAchievementLoading] = useState(false);
-
-  const [complaintRows, setComplaintRows] = useState([]);
-  const [complaintLoading, setComplaintLoading] = useState(false);
-
-  const [inquiryNRows, setInquiryNRows] = useState([]);
-  const [inquiryNLoading, setInquiryNLoading] = useState(false);
-
-  const [inquiryNHearingRows, setInquiryNHearingRows] = useState([]);
-  const [inquiryNHearingLoading, setInquiryNHearingLoading] = useState(false);
-
-  const [inquiryNDecisionRows, setInquiryNDecisionRows] = useState([]);
-  const [inquiryNDecisionLoading, setInquiryNDecisionLoading] = useState(false);
 
   const [examAttemptRows, setExamAttemptRows] = useState([]);
   const [examAttemptLoading, setExamAttemptLoading] = useState(false);
@@ -449,18 +444,14 @@ export default function OfficerProfilePage({ onLogout }) {
     setSkillLoading(false);
     setPublicationRows([]);
     setPublicationLoading(false);
+    setTrainingRows([]);
+    setTrainingLoading(false);
+    setRelationshipRows([]);
+    setRelationshipLoading(false);
     setGameRows([]);
     setGameLoading(false);
     setAchievementRows([]);
     setAchievementLoading(false);
-    setComplaintRows([]);
-    setComplaintLoading(false);
-    setInquiryNRows([]);
-    setInquiryNLoading(false);
-    setInquiryNHearingRows([]);
-    setInquiryNHearingLoading(false);
-    setInquiryNDecisionRows([]);
-    setInquiryNDecisionLoading(false);
     setExamAttemptRows([]);
     setExamAttemptLoading(false);
     setExamAttemptDetailRows([]);
@@ -631,6 +622,52 @@ export default function OfficerProfilePage({ onLogout }) {
   }, [officerId, activeTab]);
 
   useEffect(() => {
+    if (!officerId || activeTab !== "trainings") return;
+    if (tabDataOfficerRef.current.trainings === officerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setTrainingLoading(true);
+        const rows = await Api.getOfficerTrainings({ officerId });
+        if (cancelled) return;
+        setTrainingRows(Array.isArray(rows) ? rows : []);
+        tabDataOfficerRef.current.trainings = officerId;
+      } catch (e) {
+        console.error("OfficerProfilePage trainings load error:", e);
+        if (!cancelled) setTrainingRows([]);
+      } finally {
+        if (!cancelled) setTrainingLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [officerId, activeTab]);
+
+  useEffect(() => {
+    if (!officerId || activeTab !== "relationships") return;
+    if (tabDataOfficerRef.current.relationships === officerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setRelationshipLoading(true);
+        const rows = await Api.getOfficerRelationships({ officerId });
+        if (cancelled) return;
+        setRelationshipRows(Array.isArray(rows) ? rows : []);
+        tabDataOfficerRef.current.relationships = officerId;
+      } catch (e) {
+        console.error("OfficerProfilePage relationships load error:", e);
+        if (!cancelled) setRelationshipRows([]);
+      } finally {
+        if (!cancelled) setRelationshipLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [officerId, activeTab]);
+
+  useEffect(() => {
     if (!officerId || activeTab !== "games") return;
     if (tabDataOfficerRef.current.games === officerId) return;
     let cancelled = false;
@@ -669,68 +706,6 @@ export default function OfficerProfilePage({ onLogout }) {
         if (!cancelled) setAchievementRows([]);
       } finally {
         if (!cancelled) setAchievementLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [officerId, activeTab]);
-
-  useEffect(() => {
-    if (!officerId || activeTab !== "complaints") return;
-    if (tabDataOfficerRef.current.complaints === officerId) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        setComplaintLoading(true);
-        const rows = await Api.getOfficerComplaints({ officerId });
-        if (cancelled) return;
-        setComplaintRows(Array.isArray(rows) ? rows : []);
-        tabDataOfficerRef.current.complaints = officerId;
-      } catch (e) {
-        console.error("OfficerProfilePage complaints load error:", e);
-        if (!cancelled) setComplaintRows([]);
-      } finally {
-        if (!cancelled) setComplaintLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [officerId, activeTab]);
-
-  useEffect(() => {
-    if (!officerId || activeTab !== "inquiryN") return;
-    if (tabDataOfficerRef.current.inquiryN === officerId) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        setInquiryNLoading(true);
-        setInquiryNHearingLoading(true);
-        setInquiryNDecisionLoading(true);
-        const [main, hearing, decision] = await Promise.all([
-          Api.getOfficerInquiryN({ officerId }),
-          Api.getOfficerInquiryNHearing({ officerId }),
-          Api.getOfficerInquiryNDecision({ officerId }),
-        ]);
-        if (cancelled) return;
-        setInquiryNRows(Array.isArray(main) ? main : []);
-        setInquiryNHearingRows(Array.isArray(hearing) ? hearing : []);
-        setInquiryNDecisionRows(Array.isArray(decision) ? decision : []);
-        tabDataOfficerRef.current.inquiryN = officerId;
-      } catch (e) {
-        console.error("OfficerProfilePage inquiryN load error:", e);
-        if (!cancelled) {
-          setInquiryNRows([]);
-          setInquiryNHearingRows([]);
-          setInquiryNDecisionRows([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setInquiryNLoading(false);
-          setInquiryNHearingLoading(false);
-          setInquiryNDecisionLoading(false);
-        }
       }
     })();
     return () => {
@@ -947,10 +922,24 @@ export default function OfficerProfilePage({ onLogout }) {
                   </ToggleBtn>
 
                   <ToggleBtn
+                    active={activeTab === "trainings"}
+                    onClick={() => setActiveTab("trainings")}
+                  >
+                    Trainings
+                  </ToggleBtn>
+
+                  <ToggleBtn
+                    active={activeTab === "relationships"}
+                    onClick={() => setActiveTab("relationships")}
+                  >
+                    Relationships
+                  </ToggleBtn>
+
+                  <ToggleBtn
                     active={activeTab === "games"}
                     onClick={() => setActiveTab("games")}
                   >
-                    Games
+                    Games & hobbies
                   </ToggleBtn>
 
                   <ToggleBtn
@@ -968,17 +957,17 @@ export default function OfficerProfilePage({ onLogout }) {
                   </ToggleBtn>
 
                   <ToggleBtn
+                    active={activeTab === "inquiry"}
+                    onClick={() => setActiveTab("inquiry")}
+                  >
+                    Inquiry
+                  </ToggleBtn>
+
+                  <ToggleBtn
                     active={activeTab === "performance"}
                     onClick={() => setActiveTab("performance")}
                   >
                     Performance
-                  </ToggleBtn>
-
-                  <ToggleBtn
-                    active={activeTab === "inquiryN"}
-                    onClick={() => setActiveTab("inquiryN")}
-                  >
-                    Inquiry 16(3)
                   </ToggleBtn>
 
                   <ToggleBtn
@@ -1028,6 +1017,16 @@ export default function OfficerProfilePage({ onLogout }) {
                   publicationRows={publicationRows}
                   publicationLoading={publicationLoading}
                 />
+              ) : activeTab === "trainings" ? (
+                <TrainingsTab
+                  trainingRows={trainingRows}
+                  trainingLoading={trainingLoading}
+                />
+              ) : activeTab === "relationships" ? (
+                <RelationshipsTab
+                  relationshipRows={relationshipRows}
+                  relationshipLoading={relationshipLoading}
+                />
               ) : activeTab === "games" ? (
                 <GamesTab gameRows={gameRows} gameLoading={gameLoading} />
               ) : activeTab === "achievements" ? (
@@ -1037,20 +1036,13 @@ export default function OfficerProfilePage({ onLogout }) {
                 />
               ) : activeTab === "complaints" ? (
                 <ComplaintsTab
-                  complaintRows={complaintRows}
-                  complaintLoading={complaintLoading}
+                  pfNoFromProfile={profile?.PFNO}
+                  officerId={officerId}
                 />
+              ) : activeTab === "inquiry" ? (
+                <InquiryTab officerId={officerId} />
               ) : activeTab === "performance" ? (
                 <PerformanceTab pfNoFromProfile={profile?.PFNO} />
-              ) : activeTab === "inquiryN" ? (
-                <InquiryNTab
-                  inquiryNRows={inquiryNRows}
-                  inquiryNLoading={inquiryNLoading}
-                  inquiryNHearingRows={inquiryNHearingRows}
-                  inquiryNHearingLoading={inquiryNHearingLoading}
-                  inquiryNDecisionRows={inquiryNDecisionRows}
-                  inquiryNDecisionLoading={inquiryNDecisionLoading}
-                />
               ) : activeTab === "exams" ? (
                 <ExamsTab
                   examAttemptRows={examAttemptRows}

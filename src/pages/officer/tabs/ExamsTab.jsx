@@ -13,12 +13,15 @@ function StatusPill({ value }) {
   if (t === "—") return null;
   const u = t.toUpperCase();
   const positive = /PASS|QUAL|SUCCESS|CLEARED|APPROV|COMPLETE/i.test(u);
-  const negative = /FAIL|REJECT|DISMISS|PEND|WITHHOLD/i.test(u);
+  const pending = /PEND|PENDING|WITHHOLD|WITHHELD|AWAIT/i.test(u);
+  const negative = /FAIL|REJECT|DISMISS/i.test(u);
   const cls = positive
     ? "bg-emerald-100 text-emerald-900 border-emerald-200/80"
-    : negative
-      ? "bg-rose-100 text-rose-900 border-rose-200/80"
-      : "bg-slate-100 text-slate-800 border-slate-200/80";
+    : pending
+      ? "bg-amber-100 text-amber-950 border-amber-200/80"
+      : negative
+        ? "bg-rose-100 text-rose-900 border-rose-200/80"
+        : "bg-slate-100 text-slate-800 border-slate-200/80";
   return (
     <span
       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide border ${cls}`}

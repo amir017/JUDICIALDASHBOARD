@@ -18,6 +18,28 @@ import {
   fmtCalendarSpan,
 } from "../officerUtils/officerFormat.js";
 import {
+  PERFORMANCE_SLICE_COLORS,
+  DONUT_PIE_PROPS,
+  DONUT_CELL_STROKE,
+} from "../officerUtils/chartColors.js";
+
+/** Extra space so slice labels are not clipped by the SVG viewBox */
+const PIE_CHART_MARGIN = { top: 40, right: 68, bottom: 40, left: 68 };
+/** Slightly smaller donut when designation titles are long */
+const DONUT_LONG_NAME = {
+  ...DONUT_PIE_PROPS,
+  innerRadius: "44%",
+  outerRadius: "62%",
+};
+
+function pieSliceLabel({ name, percent }) {
+  const p = (percent * 100).toFixed(0);
+  const s = String(name ?? "").trim();
+  if (!s) return `${p}%`;
+  const short = s.length > 14 ? `${s.slice(0, 12)}…` : s;
+  return `${short} ${p}%`;
+}
+import {
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -132,8 +154,88 @@ const Select = ({ value, onChange, options = [] }) => (
 );
 
 /* --------------------------- normalize helpers ---------------------------- */
-const SHORT_STAY_DAYS = 60;
-const TRUE_STAY_DAYS = 548; // approx 1.5 years
+/** Defaults when posting rows do not include designation-based limits from ERP. */
+const DEFAULT_SHORT_POSTING_MAX_DAYS = 60;
+const DEFAULT_MATURE_POSTING_MIN_DAYS = 548;
+
+/**
+ * Reads optional limits joined from DESIGNATION (or similar) on each posting row.
+ * Add whichever columns your API exposes — first positive number wins.
+ * @see ERP DESIGNATION / posting-history payload
+ */
+function firstPositiveNumber(...vals) {
+  for (const v of vals) {
+    const n = Number(String(v ?? "").replace(/,/g, "").trim());
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+function getMaturePostingMinDaysFromRow(r) {
+  return (
+    firstPositiveNumber(
+      r.MATUREPERIOD,
+      r.MATURE_POSTING_MIN_DAYS,
+      r.MATURITY_POSTING_MIN_DAYS,
+      r.MATURE_MIN_DAYS,
+      r.MIN_MATURITY_DAYS,
+      r.TRUE_STAY_MIN_DAYS,
+      r.MATURE_POSTING_DAYS,
+      r.DESIGNATION_MATURE_DAYS,
+      r.DESIG_MATURE_DAYS,
+      r.POSTING_MATURITY_DAYS,
+      r.TENURE_MATURITY_MIN,
+      r.MATURITY_DAYS,
+      r.MIN_DAYS_FOR_MATURE_POSTING,
+    ) ?? DEFAULT_MATURE_POSTING_MIN_DAYS
+  );
+}
+
+function getShortPostingMaxDaysFromRow(r) {
+  return (
+    firstPositiveNumber(
+      r.SHORTPERIOD,
+      r.SHORT_POSTING_MAX_DAYS,
+      r.MAX_SHORT_POSTING_DAYS,
+      r.SHORT_STAY_MAX_DAYS,
+      r.MOBILITY_MAX_DAYS,
+      r.SHORT_POSTING_DAYS,
+    ) ?? DEFAULT_SHORT_POSTING_MAX_DAYS
+  );
+}
+
+/** Ensure short and mature bands do not overlap; fall back to defaults if bad data. */
+function effectiveStayThresholds(r) {
+  let matureMin = getMaturePostingMinDaysFromRow(r);
+  let shortMax = getShortPostingMaxDaysFromRow(r);
+  if (shortMax >= matureMin) {
+    shortMax = DEFAULT_SHORT_POSTING_MAX_DAYS;
+    matureMin = DEFAULT_MATURE_POSTING_MIN_DAYS;
+  }
+  return { matureMin, shortMax };
+}
+
+function buildStayThresholdSubtitle(rows) {
+  const list = rows || [];
+  if (!list.length) {
+    return "Short posting and mature posting use default day limits until designation thresholds are present on posting rows.";
+  }
+  const shorts = [...new Set(list.map((r) => r._shortMaxDays))].sort(
+    (a, b) => a - b,
+  );
+  const matures = [...new Set(list.map((r) => r._matureMinDays))].sort(
+    (a, b) => a - b,
+  );
+  const shortPart =
+    shorts.length === 1
+      ? `under ${shorts[0]} days (${fmtYMDLong(shorts[0])})`
+      : `under ${shorts[0]}–${shorts[shorts.length - 1]} days (by designation / row)`;
+  const maturePart =
+    matures.length === 1
+      ? `over ${matures[0]} days (${fmtYMDLong(matures[0])})`
+      : `over ${matures[0]}–${matures[matures.length - 1]} days (by designation / row)`;
+  return `Short posting is ${shortPart}; mature posting is ${maturePart}.`;
+}
 
 const getCadre = (r) =>
   r.CADRENAME ||
@@ -165,10 +267,22 @@ const getPostingBucket = (r) => {
 };
 
 const normalizePostingRows = (rows) => {
-  const list = (rows || []).map((r) => {
-    const from = parseDateSafe(r.FDATE || r.DATEOFPOSTING);
-    const to = parseDateSafe(r.TDATE) || new Date();
+  const ordered = (rows || []).map((r) => ({
+    r,
+    from: parseDateSafe(r.FDATE || r.DATEOFPOSTING),
+  }));
+  ordered.sort(
+    (a, b) => (a.from?.getTime?.() || 0) - (b.from?.getTime?.() || 0),
+  );
+
+  const list = ordered.map((item, i) => {
+    const r = item.r;
+    const from = item.from;
+    const explicitTo = parseDateSafe(r.TDATE);
+    const to =
+      explicitTo ?? ordered[i + 1]?.from ?? new Date();
     const durationDays = daysBetween(from, to);
+    const { matureMin, shortMax } = effectiveStayThresholds(r);
 
     return {
       ...r,
@@ -181,14 +295,13 @@ const normalizePostingRows = (rows) => {
       _designation: getDesignation(r),
       _exCadreValue: safeText(getExCadreValue(r)),
       _bucket: getPostingBucket(r),
-      _isShortStay: durationDays < SHORT_STAY_DAYS,
-      _isTrueStay: durationDays > TRUE_STAY_DAYS,
+      _matureMinDays: matureMin,
+      _shortMaxDays: shortMax,
+      _isShortStay: durationDays < shortMax,
+      _isTrueStay: durationDays > matureMin,
     };
   });
 
-  list.sort(
-    (a, b) => (a._from?.getTime?.() || 0) - (b._from?.getTime?.() || 0),
-  );
   return list;
 };
 
@@ -319,7 +432,7 @@ const buildStayTypePie = (rows, bucket) => {
 
   return [
     {
-      label: "Short Stay",
+      label: "Short posting",
       count: shortRows.length,
       totalDays: shortRows.reduce(
         (sum, r) => sum + Number(r._durationDays || 0),
@@ -339,7 +452,7 @@ const buildStayTypePie = (rows, bucket) => {
       minDistrict: shortMin?._district || "—",
     },
     {
-      label: "True Stay",
+      label: "Mature posting",
       count: trueRows.length,
       totalDays: trueRows.reduce(
         (sum, r) => sum + Number(r._durationDays || 0),
@@ -383,25 +496,16 @@ const buildDistrictDesignationStayPie = (rows, bucket, district) => {
 };
 
 /* -------------------------------- charts --------------------------------- */
-const PIE_COLORS = [
-  "#0f766e",
-  "#0284c7",
-  "#7c3aed",
-  "#ea580c",
-  "#16a34a",
-  "#dc2626",
-  "#0891b2",
-  "#4f46e5",
-];
+const PIE_COLORS = PERFORMANCE_SLICE_COLORS;
 
 const BUCKET_COLORS = {
-  "In Field": "#0f766e",
-  "Ex-Cadre": "#7c3aed",
+  "In Field": PERFORMANCE_SLICE_COLORS[0],
+  "Ex-Cadre": PERFORMANCE_SLICE_COLORS[3],
 };
 
 const STAY_TYPE_COLORS = {
-  "Short Stay": "#f59e0b",
-  "True Stay": "#7c3aed",
+  "Short posting": PERFORMANCE_SLICE_COLORS[7],
+  "Mature posting": PERFORMANCE_SLICE_COLORS[2],
 };
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -589,23 +693,23 @@ const DecisionInsights = ({ rows, bucket }) => {
         <InsightCallout
           icon={ArrowRightLeft}
           tone={insights.shortPct > 35 ? "amber" : "slate"}
-          title={"Mobility (under 2 months per posting)"}
+          title={"Mobility (short postings)"}
           body={`${insights.shortPct.toFixed(0)}% of ${bucketLabel} (${Math.round((insights.shortPct / 100) * insights.count)} records).`}
           hint={
             insights.shortPct > 35
-              ? "Elevated short stays — check for rapid transfers or interim postings."
-              : "Short stays within a typical range for context."
+              ? "Elevated short postings — check for rapid transfers or interim postings."
+              : "Short postings within a typical range for context."
           }
         />
 
         <InsightCallout
           icon={Clock}
           tone={insights.truePct > 25 ? "teal" : "slate"}
-          title={"Stability (over 1.5 years per posting)"}
-          body={`${insights.truePct.toFixed(0)}% of ${bucketLabel} are long stays. Calendar career span in this view: ${fmtCalendarSpan(insights.careerBounds.start, insights.careerBounds.end)}.`}
+          title={"Mature postings (tenure by designation)"}
+          body={`${insights.truePct.toFixed(0)}% of ${bucketLabel} count as mature postings. Calendar career span in this view: ${fmtCalendarSpan(insights.careerBounds.start, insights.careerBounds.end)}.`}
           hint={
             insights.truePct > 25
-              ? "Strong long postings — useful for depth-of-experience narrative."
+              ? "Strong mature postings — useful for depth-of-experience narrative."
               : "Span = earliest start to latest end (not sum of rows), so it matches typical service length."
           }
         />
@@ -678,20 +782,18 @@ const BucketPie = ({ rows }) => {
       rightLabel={`${rows.length || 0} Records`}
     >
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-center">
-        <div className="xl:col-span-6 h-[360px]">
+        <div className="xl:col-span-6 h-[360px] min-h-[280px] overflow-visible">
           <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
+            <PieChart margin={PIE_CHART_MARGIN}>
               <Pie
                 data={data}
                 dataKey="count"
                 nameKey="label"
-                outerRadius={118}
-                innerRadius={52}
                 cx="50%"
                 cy="50%"
-                label={({ name, percent }) =>
-                  `${name} ${(percent * 100).toFixed(0)}%`
-                }
+                {...DONUT_PIE_PROPS}
+                label={pieSliceLabel}
+                labelLine={{ stroke: "#64748b", strokeWidth: 1 }}
               >
                 {data.map((entry, idx) => (
                   <Cell
@@ -700,6 +802,7 @@ const BucketPie = ({ rows }) => {
                       BUCKET_COLORS[entry.label] ||
                       PIE_COLORS[idx % PIE_COLORS.length]
                     }
+                    {...DONUT_CELL_STROKE}
                   />
                 ))}
               </Pie>
@@ -722,9 +825,9 @@ const BucketPie = ({ rows }) => {
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <Chip>Postings: {x.count}</Chip>
-                    <Chip>Avg Stay: {fmtYMDLong(x.avgDays || 0)}</Chip>
-                    <Chip>Short: {x.shortCount}</Chip>
-                    <Chip>True: {x.trueCount}</Chip>
+                    <Chip>Avg posting: {fmtYMDLong(x.avgDays || 0)}</Chip>
+                    <Chip>Short posting: {x.shortCount}</Chip>
+                    <Chip>Mature: {x.trueCount}</Chip>
                   </div>
                 </div>
                 <span
@@ -748,26 +851,27 @@ const BucketPie = ({ rows }) => {
 
 const StayTypePieChart = ({ rows, bucket }) => {
   const data = useMemo(() => buildStayTypePie(rows, bucket), [rows, bucket]);
+  const subtitle = useMemo(() => buildStayThresholdSubtitle(rows), [rows]);
 
   return (
     <SectionCard
-      title="Short Stay vs True Stay"
-      subtitle="Short stay is less than 2 months, true stay is more than 1.5 years"
+      title="Short posting vs mature posting"
+      subtitle={subtitle}
       rightLabel={bucket}
     >
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-center">
-        <div className="xl:col-span-7 h-[400px]">
+        <div className="xl:col-span-7 h-[400px] min-h-[300px] overflow-visible">
           <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
+            <PieChart margin={PIE_CHART_MARGIN}>
               <Pie
                 data={data}
                 dataKey="count"
                 nameKey="label"
-                outerRadius={120}
-                innerRadius={48}
-                label={({ name, percent }) =>
-                  `${name} ${(percent * 100).toFixed(0)}%`
-                }
+                cx="50%"
+                cy="50%"
+                {...DONUT_PIE_PROPS}
+                label={pieSliceLabel}
+                labelLine={{ stroke: "#64748b", strokeWidth: 1 }}
               >
                 {data.map((entry, idx) => (
                   <Cell
@@ -776,6 +880,7 @@ const StayTypePieChart = ({ rows, bucket }) => {
                       STAY_TYPE_COLORS[entry.label] ||
                       PIE_COLORS[idx % PIE_COLORS.length]
                     }
+                    {...DONUT_CELL_STROKE}
                   />
                 ))}
               </Pie>
@@ -799,21 +904,21 @@ const StayTypePieChart = ({ rows, bucket }) => {
 
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <Chip>Records: {x.count}</Chip>
-                    <Chip>Total: {fmtYMDLong(x.totalDays || 0)}</Chip>
-                    <Chip>Avg: {fmtYMDLong(x.avgDays || 0)}</Chip>
+                    <Chip>Total posting: {fmtYMDLong(x.totalDays || 0)}</Chip>
+                    <Chip>Avg posting: {fmtYMDLong(x.avgDays || 0)}</Chip>
                     <Chip>Max: {fmtYMDLong(x.maxDays || 0)}</Chip>
                     <Chip>Min: {fmtYMDLong(x.minDays || 0)}</Chip>
                   </div>
 
                   <div className="mt-3 space-y-1 text-[11px] font-bold text-slate-600">
                     <div>
-                      Max stay district:{" "}
+                      Max posting (district):{" "}
                       <span className="font-black text-slate-900">
                         {x.maxDistrict}
                       </span>
                     </div>
                     <div>
-                      Min stay district:{" "}
+                      Min posting (district):{" "}
                       <span className="font-black text-slate-900">
                         {x.minDistrict}
                       </span>
@@ -848,8 +953,8 @@ const DistrictWiseStayBarChart = ({ rows, bucket }) => {
 
   return (
     <SectionCard
-      title="District-wise Total Stay"
-      subtitle="Each bar shows district stay with total, average, max and min tenure"
+      title="District-wise total posting"
+      subtitle="Each bar is cumulative posting tenure in the district (total, average, max, min)"
       rightLabel={`${data.length} Districts`}
     >
       {!data.length ? (
@@ -857,20 +962,20 @@ const DistrictWiseStayBarChart = ({ rows, bucket }) => {
           No district data found.
         </div>
       ) : (
-        <>
-          <div className="h-[420px]">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+          <div className="xl:col-span-7 h-[520px] min-h-[420px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={data}
-                margin={{ top: 14, right: 24, left: 4, bottom: 76 }}
+                margin={{ top: 16, right: 26, left: 4, bottom: 82 }}
               >
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="district"
-                  angle={-25}
+                  angle={-28}
                   textAnchor="end"
                   interval={0}
-                  height={80}
+                  height={86}
                   tick={{ fontSize: 11, fontWeight: 700 }}
                 />
                 <YAxis tick={{ fontSize: 11, fontWeight: 700 }} />
@@ -878,7 +983,7 @@ const DistrictWiseStayBarChart = ({ rows, bucket }) => {
                 <Legend />
                 <Bar
                   dataKey="totalDays"
-                  name="Total Stay (Days)"
+                  name="Total posting (days)"
                   fill="#0284c7"
                   radius={[8, 8, 0, 0]}
                 />
@@ -886,26 +991,33 @@ const DistrictWiseStayBarChart = ({ rows, bucket }) => {
             </ResponsiveContainer>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
-            {data.slice(0, 6).map((x, idx) => (
+          <div className="xl:col-span-5 space-y-3 max-h-[520px] overflow-auto pr-1">
+            {data.map((x, idx) => (
               <div
-                key={idx}
-                className="rounded-2xl border border-cyan-100/80 bg-gradient-to-br from-white to-cyan-50/40 px-4 py-3 shadow-[0_10px_32px_-16px_rgba(8,145,178,0.15)] ring-1 ring-white/80"
+                key={`${x.district}-${idx}`}
+                className="rounded-2xl border border-cyan-100/80 bg-gradient-to-br from-white to-cyan-50/35 px-4 py-3.5 shadow-[0_10px_30px_-16px_rgba(8,145,178,0.18)]"
               >
-                <div className="text-[13px] font-black text-slate-950">
-                  {x.district}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-[13px] font-black text-slate-900">
+                    {x.district}
+                  </div>
+                  <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black text-white bg-cyan-600">
+                    {x.count}
+                  </span>
                 </div>
 
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  <Chip>Total: {fmtYMDLong(x.totalDays || 0)}</Chip>
-                  <Chip>Avg: {fmtYMDLong(x.avgDays || 0)}</Chip>
+                  <Chip>Count: {x.count}</Chip>
+                  <Chip>Posting (days): {Number(x.totalDays || 0).toLocaleString()}</Chip>
+                  <Chip>Total posting: {fmtYMDLong(x.totalDays || 0)}</Chip>
+                  <Chip>Avg posting: {fmtYMDLong(x.avgDays || 0)}</Chip>
                   <Chip>Max: {fmtYMDLong(x.maxDays || 0)}</Chip>
                   <Chip>Min: {fmtYMDLong(x.minDays || 0)}</Chip>
                 </div>
               </div>
             ))}
           </div>
-        </>
+        </div>
       )}
     </SectionCard>
   );
@@ -920,7 +1032,7 @@ const DesignationPieChart = ({ rows, bucket }) => {
   return (
     <SectionCard
       title="Designation-wise Distribution"
-      subtitle="Overall designation split in selected posting type"
+      subtitle="Overall designation split in selected posting type along with tenure"
       rightLabel={`${data.length} Designations`}
     >
       {!data.length ? (
@@ -928,125 +1040,55 @@ const DesignationPieChart = ({ rows, bucket }) => {
           No data found.
         </div>
       ) : (
-        <div className="h-[380px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                dataKey="count"
-                nameKey="label"
-                outerRadius={118}
-                innerRadius={44}
-                label={({ name, percent }) =>
-                  `${name} ${(percent * 100).toFixed(0)}%`
-                }
-              >
-                {data.map((entry, idx) => (
-                  <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip content={<CustomTooltip />} />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-    </SectionCard>
-  );
-};
-
-const DistrictDesignationStayPieChart = ({ rows, bucket }) => {
-  const [district, setDistrict] = useState("All");
-
-  const districtOptions = useMemo(() => {
-    const filtered = filterByBucket(rows, bucket);
-    const unique = Array.from(
-      new Set(filtered.map((r) => safeText(r._district)).filter(Boolean)),
-    ).sort((a, b) => a.localeCompare(b));
-
-    return [
-      { label: "All Districts", value: "All" },
-      ...unique.map((x) => ({ label: x, value: x })),
-    ];
-  }, [rows, bucket]);
-
-  const data = useMemo(
-    () => buildDistrictDesignationStayPie(rows, bucket, district),
-    [rows, bucket, district],
-  );
-
-  return (
-    <SectionCard
-      title="Designation-wise Total Stay in District"
-      subtitle="Pie chart showing total stay by designation inside selected district"
-      rightLabel={district}
-    >
-      <div className="mb-4 max-w-sm">
-        <Select
-          value={district}
-          onChange={(e) => setDistrict(e.target.value)}
-          options={districtOptions}
-        />
-      </div>
-
-      {!data.length ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 py-12 text-center text-sm font-bold text-slate-500">
-          No data found for selected district.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 items-center xl:grid-cols-12">
-          <div className="xl:col-span-7 h-[400px]">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+          <div className="xl:col-span-7 h-[520px] min-h-[420px] overflow-visible">
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
+              <PieChart margin={PIE_CHART_MARGIN}>
                 <Pie
                   data={data}
-                  dataKey="totalDays"
+                  dataKey="count"
                   nameKey="label"
-                  outerRadius={122}
-                  innerRadius={50}
-                  label={({ name, percent }) =>
-                    `${name} ${(percent * 100).toFixed(0)}%`
-                  }
+                  cx="50%"
+                  cy="50%"
+                  {...DONUT_LONG_NAME}
+                  label={pieSliceLabel}
+                  labelLine={{ stroke: "#64748b", strokeWidth: 1 }}
                 >
                   {data.map((entry, idx) => (
                     <Cell
                       key={idx}
                       fill={PIE_COLORS[idx % PIE_COLORS.length]}
+                      {...DONUT_CELL_STROKE}
                     />
                   ))}
                 </Pie>
                 <Tooltip content={<CustomTooltip />} />
-                <Legend />
+                <Legend wrapperStyle={{ paddingTop: 8 }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
 
-          <div className="xl:col-span-5 space-y-3">
+          <div className="xl:col-span-5 space-y-3 max-h-[520px] overflow-auto pr-1">
             {data.map((x, idx) => (
               <div
-                key={idx}
-                className="rounded-2xl border border-indigo-100/80 bg-gradient-to-br from-white to-indigo-50/35 px-4 py-3.5 shadow-[0_10px_32px_-16px_rgba(99,102,241,0.14)] ring-1 ring-white/80"
+                key={`${x.label}-${idx}`}
+                className="rounded-2xl border border-violet-100/80 bg-gradient-to-br from-white to-violet-50/30 px-4 py-3.5 shadow-[0_10px_30px_-16px_rgba(124,58,237,0.2)]"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-[13px] font-black text-slate-950">
-                      {x.label}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <Chip>District: {district}</Chip>
-                      <Chip>Total Stay: {fmtYMDLong(x.totalDays || 0)}</Chip>
-                      <Chip>Avg Stay: {fmtYMDLong(x.avgDays || 0)}</Chip>
-                      <Chip>Records: {x.count}</Chip>
-                    </div>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-[13px] font-black text-slate-900">
+                    {x.label}
                   </div>
                   <span
-                    className="inline-flex items-center px-2.5 py-1 rounded-full text-[10.5px] font-black text-white"
-                    style={{
-                      backgroundColor: PIE_COLORS[idx % PIE_COLORS.length],
-                    }}
+                    className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black text-white"
+                    style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }}
                   >
                     {x.count}
                   </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <Chip>Count: {x.count}</Chip>
+                  <Chip>Posting (days): {Number(x.totalDays || 0).toLocaleString()}</Chip>
+                  <Chip>Posting tenure: {fmtYMDLong(x.totalDays || 0)}</Chip>
                 </div>
               </div>
             ))}
@@ -1112,6 +1154,26 @@ const InsightPanel = ({ rows, bucket }) => {
   const truePct = totalPostings ? (trueCount / totalPostings) * 100 : 0;
   const careerBounds = getCareerCalendarBounds(filtered);
 
+  const shortSub = useMemo(() => {
+    if (!totalPostings) return "—";
+    const u = [...new Set(filtered.map((r) => r._shortMaxDays))].sort(
+      (a, b) => a - b,
+    );
+    if (u.length === 1)
+      return `${shortPct.toFixed(0)}% · under ${u[0]} days (${fmtYMDLong(u[0])})`;
+    return `${shortPct.toFixed(0)}% · under per-row limits (${u[0]}–${u[u.length - 1]} d)`;
+  }, [filtered, shortPct, totalPostings]);
+
+  const matureSub = useMemo(() => {
+    if (!totalPostings) return "—";
+    const u = [...new Set(filtered.map((r) => r._matureMinDays))].sort(
+      (a, b) => a - b,
+    );
+    if (u.length === 1)
+      return `${truePct.toFixed(0)}% · over ${u[0]} days (${fmtYMDLong(u[0])})`;
+    return `${truePct.toFixed(0)}% · over per-row limits (${u[0]}–${u[u.length - 1]} d)`;
+  }, [filtered, truePct, totalPostings]);
+
   return (
     <SectionCard
       title="Executive KPIs"
@@ -1132,15 +1194,15 @@ const InsightPanel = ({ rows, bucket }) => {
           accent="slate"
         />
         <KpiCard
-          label="Short stays"
+          label="Short postings"
           value={shortCount}
-          sub={`${shortPct.toFixed(0)}% · under 2 months`}
+          sub={shortSub}
           accent="amber"
         />
         <KpiCard
-          label="True stays"
+          label="Mature postings"
           value={trueCount}
-          sub={`${truePct.toFixed(0)}% · over 1.5 years`}
+          sub={matureSub}
           accent="violet"
         />
       </div>
@@ -1185,7 +1247,7 @@ const PostingDashboard = ({ items }) => {
           </div>
           <div className="min-w-0">
             <h2 className="text-xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-teal-800 via-emerald-700 to-cyan-700 sm:text-2xl">
-              Posting intelligence
+              Posting analytics
             </h2>
             <p className="mt-1 max-w-2xl text-xs font-semibold leading-relaxed text-slate-600 sm:text-sm">
               Filter by scope, scan decision-ready insights and KPIs, then drill
@@ -1221,15 +1283,10 @@ const PostingDashboard = ({ items }) => {
       <InsightPanel rows={items} bucket={activeBucket} />
       <BucketPie rows={items} />
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <StayTypePieChart rows={items} bucket={activeBucket} />
-        <DistrictWiseStayBarChart rows={items} bucket={activeBucket} />
-      </div>
+      <StayTypePieChart rows={items} bucket={activeBucket} />
+      <DistrictWiseStayBarChart rows={items} bucket={activeBucket} />
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <DesignationPieChart rows={items} bucket={activeBucket} />
-        <DistrictDesignationStayPieChart rows={items} bucket={activeBucket} />
-      </div>
+      <DesignationPieChart rows={items} bucket={activeBucket} />
     </div>
   );
 };
@@ -1248,7 +1305,7 @@ export default function PostingTransfersTab({ historyRows, historyLoading }) {
             <Zap className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 text-teal-600" />
           </div>
           <p className="text-sm font-black uppercase tracking-widest text-teal-800/85">
-            Building posting intelligence…
+            Building posting analytics…
           </p>
           <div className="w-full max-w-md space-y-3">
             <div className="h-3 rounded-full bg-gradient-to-r from-teal-100 via-cyan-100 to-teal-100 animate-pulse" />

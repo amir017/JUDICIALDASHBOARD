@@ -75,13 +75,29 @@ const getExCadre = (r) =>
   );
 
 const normalizePostingRows = (rows) => {
-  const list = (rows || []).map((r) => {
-    const from = parseDateSafe(r.FDATE || r.DATEOFPOSTING);
-    const to = parseDateSafe(r.TDATE) || new Date();
+  const ordered = (rows || []).map((r) => ({
+    r,
+    from: parseDateSafe(r.FDATE || r.DATEOFPOSTING),
+  }));
+  ordered.sort(
+    (a, b) => (a.from?.getTime?.() || 0) - (b.from?.getTime?.() || 0),
+  );
+
+  const list = ordered.map((item, i) => {
+    const r = item.r;
+    const from = item.from;
+    const explicitTo = parseDateSafe(r.TDATE);
+    const to =
+      explicitTo ?? ordered[i + 1]?.from ?? new Date();
     const durationDays = daysBetween(from, to);
 
     const fromTxt = toDDMMYYYY(r.FDATE || r.DATEOFPOSTING);
-    const toTxt = r.TDATE ? toDDMMYYYY(r.TDATE) : "Present";
+    const nextR = ordered[i + 1]?.r;
+    const toTxt = explicitTo
+      ? toDDMMYYYY(r.TDATE)
+      : nextR
+        ? toDDMMYYYY(nextR.FDATE || nextR.DATEOFPOSTING) || "—"
+        : "Present";
 
     return {
       ...r,
@@ -95,10 +111,6 @@ const normalizePostingRows = (rows) => {
       _exCadre: getExCadre(r),
     };
   });
-
-  list.sort(
-    (a, b) => (a._from?.getTime?.() || 0) - (b._from?.getTime?.() || 0),
-  );
 
   return list;
 };
