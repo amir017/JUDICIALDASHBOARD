@@ -10,6 +10,19 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import Api from "../API/Api";
 
+/** Keep only the Dashboard entry for the header nav (no other top-level menus). */
+function filterDashboardMenusOnly(menusData) {
+  if (!Array.isArray(menusData)) return [];
+  const isDashboard = (m) => {
+    const name = String(m.MenuName || "").toLowerCase();
+    const url = String(m.Url || "").toLowerCase();
+    return name.includes("dashboard") || url.includes("userdashboard");
+  };
+  return menusData
+    .filter(isDashboard)
+    .map((m) => ({ ...m, children: [] }));
+}
+
 /* ---------- Submenu Component ---------- */
 function MenuItem({ menu, onNavigate }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -122,7 +135,20 @@ export default function Layout({ children, onLogout }) {
         setUser(stored.user || {});
 
         const menusData = await Api.getMenuserp();
-        setMenus(menusData);
+        const dashboardOnly = filterDashboardMenusOnly(menusData);
+        setMenus(
+          dashboardOnly.length
+            ? dashboardOnly
+            : [
+                {
+                  MenuID: "fallback-dashboard",
+                  MenuName: "Dashboard",
+                  Url: "/UserDashboard",
+                  Icon: "fas fa-chart-line",
+                  children: [],
+                },
+              ],
+        );
       } catch (err) {
         console.error("Error fetching menus:", err);
         navigate("/login");
@@ -183,11 +209,11 @@ export default function Layout({ children, onLogout }) {
             <div className="relative z-10">
               {/* Full title on desktop */}
               <h1 className="hidden md:block text-white font-extrabold text-lg tracking-tight drop-shadow-md">
-                Integrated Judicial Performance & Management System
+                Integrated Judicial Officers Performance & Management System (ERP)
               </h1>
               {/* Short title on mobile */}
               <h1 className="block md:hidden text-white font-extrabold text-lg tracking-tight drop-shadow-md">
-                IJPMS
+                IJOPMS (ERP)
               </h1>
               <p className="text-white/90 text-xs drop-shadow-sm"></p>
             </div>

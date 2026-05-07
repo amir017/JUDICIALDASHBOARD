@@ -9,6 +9,7 @@ import {
   Sparkles,
   Zap,
   Compass,
+  Layers,
 } from "lucide-react";
 import {
   safeText,
@@ -25,6 +26,13 @@ import {
 
 /** Extra space so slice labels are not clipped by the SVG viewBox */
 const PIE_CHART_MARGIN = { top: 40, right: 68, bottom: 40, left: 68 };
+/** Larger margin + donut for tenure pies (labels show % + years) */
+const TENURE_PIE_MARGIN = { top: 56, right: 96, bottom: 56, left: 96 };
+const TENURE_PIE_DONUT = {
+  ...DONUT_PIE_PROPS,
+  innerRadius: "34%",
+  outerRadius: "78%",
+};
 /** Slightly smaller donut when designation titles are long */
 const DONUT_LONG_NAME = {
   ...DONUT_PIE_PROPS,
@@ -38,6 +46,24 @@ function pieSliceLabel({ name, percent }) {
   if (!s) return `${p}%`;
   const short = s.length > 14 ? `${s.slice(0, 12)}…` : s;
   return `${short} ${p}%`;
+}
+
+/** Calendar-average years from total days (for pie labels). */
+function formatTenureYearsShort(days) {
+  const d = Number(days) || 0;
+  if (d <= 0) return "0 yrs";
+  const y = d / 365.25;
+  return `${y.toFixed(y < 1 ? 2 : 1)} yrs`;
+}
+
+function tenurePieSliceLabel({ name, percent, value }) {
+  const p = (percent * 100).toFixed(0);
+  const days = Number(value) || 0;
+  const yPart = days > 0 ? ` · ${formatTenureYearsShort(days)}` : "";
+  const s = String(name ?? "").trim();
+  if (!s) return `${p}%${yPart}`;
+  const short = s.length > 12 ? `${s.slice(0, 10)}…` : s;
+  return `${short} ${p}%${yPart}`;
 }
 import {
   ResponsiveContainer,
@@ -248,8 +274,23 @@ const getCadre = (r) =>
 const getDistrict = (r) =>
   r.DISTRICTNAME || r.DISTRICT || r.POSTDISTRICT || "Unknown";
 
-const getTehsil = (r) =>
-  r.TEHSILNAME || r.TEHSIL || r.TEHNAME || r.SUBDIVNAME || "Unknown";
+/** V_POSTING_HISTORY: use DIVISIONNAME when present; else district columns. */
+const getPostingDivision = (r) =>
+  r.DIVISIONNAME ||
+  r.divisionname ||
+  r.DIVISION_NAME ||
+  r.division_name ||
+  getDistrict(r);
+
+/** Tehsil / subdivision (V_POSTING_HISTORY): SUBDIVNAME first, then other tehsil fields. */
+const getPostingTehsil = (r) =>
+  r.SUBDIVNAME ||
+  r.subdivname ||
+  r.SUB_DIV_NAME ||
+  r.TEHSILNAME ||
+  r.TEHSIL ||
+  r.TEHNAME ||
+  "Unknown";
 
 const getDesignation = (r) => r.DESIGNATIONDESC || r.DESIGNATION || "Unknown";
 
@@ -266,7 +307,7 @@ const getPostingBucket = (r) => {
   return val === "OTHER COURTS" ? "In Field" : "Ex-Cadre";
 };
 
-const normalizePostingRows = (rows) => {
+export const normalizePostingRows = (rows) => {
   const ordered = (rows || []).map((r) => ({
     r,
     from: parseDateSafe(r.FDATE || r.DATEOFPOSTING),
@@ -291,7 +332,8 @@ const normalizePostingRows = (rows) => {
       _durationDays: durationDays,
       _cadre: getCadre(r),
       _district: getDistrict(r),
-      _tehsil: getTehsil(r),
+      _division: getPostingDivision(r),
+      _tehsil: getPostingTehsil(r),
       _designation: getDesignation(r),
       _exCadreValue: safeText(getExCadreValue(r)),
       _bucket: getPostingBucket(r),
@@ -383,13 +425,13 @@ const buildBucketSummary = (rows) => {
 
 const buildDistrictStaySummary = (rows, bucket) => {
   const filtered = filterByBucket(rows, bucket).filter(
-    (r) => safeText(r._district) && safeText(r._district) !== "Unknown",
+    (r) => safeText(r._division) && safeText(r._division) !== "Unknown",
   );
 
-  const groups = groupRows(filtered, (r) => r._district);
+  const groups = groupRows(filtered, (r) => r._division);
 
   return Object.entries(groups)
-    .map(([district, g]) => {
+    .map(([division, g]) => {
       const totalDays = g.reduce(
         (sum, r) => sum + Number(r._durationDays || 0),
         0,
@@ -399,7 +441,7 @@ const buildDistrictStaySummary = (rows, bucket) => {
       const minRow = getMinStayRow(g);
 
       return {
-        district,
+        district: division,
         count: g.length,
         totalDays,
         avgDays,
@@ -411,12 +453,80 @@ const buildDistrictStaySummary = (rows, bucket) => {
     .slice(0, 10);
 };
 
+const buildTehsilStaySummary = (rows, bucket) => {
+  const filtered = filterByBucket(rows, bucket).filter(
+    (r) => safeText(r._tehsil) && safeText(r._tehsil) !== "Unknown",
+  );
+
+  const groups = groupRows(filtered, (r) => r._tehsil);
+
+  return Object.entries(groups)
+    .map(([tehsil, g]) => {
+      const totalDays = g.reduce(
+        (sum, r) => sum + Number(r._durationDays || 0),
+        0,
+      );
+      const avgDays = g.length ? Math.round(totalDays / g.length) : 0;
+      const maxRow = getMaxStayRow(g);
+      const minRow = getMinStayRow(g);
+
+      return {
+        tehsil,
+        count: g.length,
+        totalDays,
+        avgDays,
+        maxDays: maxRow?._durationDays || 0,
+        minDays: minRow?._durationDays || 0,
+      };
+    })
+    .sort((a, b) => b.totalDays - a.totalDays)
+    .slice(0, 12);
+};
+
 const buildDesignationDistribution = (rows, bucket) => {
   const filtered = filterByBucket(rows, bucket);
   const groups = groupRows(filtered, (r) => r._designation);
   return Object.entries(groups)
     .map(([k, g]) => summarizeRows(k, g))
-    .sort((a, b) => b.count - a.count || b.totalDays - a.totalDays);
+    .sort((a, b) => b.totalDays - a.totalDays || b.count - a.count);
+};
+
+/** Pie data: each slice = cumulative posting tenure (days) by division (DIVISIONNAME). */
+const buildDistrictTenurePieData = (rows, bucket) => {
+  const filtered = filterByBucket(rows, bucket).filter(
+    (r) => safeText(r._division) && safeText(r._division) !== "Unknown",
+  );
+  if (!filtered.length) return [];
+  const groups = groupRows(filtered, (r) => r._division);
+  const list = Object.entries(groups)
+    .map(([division, g]) => {
+      const totalDays = g.reduce(
+        (sum, r) => sum + Number(r._durationDays || 0),
+        0,
+      );
+      return {
+        label: division,
+        count: g.length,
+        totalDays,
+        avgDays: g.length ? Math.round(totalDays / g.length) : 0,
+      };
+    })
+    .sort((a, b) => b.totalDays - a.totalDays);
+
+  const TOP = 10;
+  if (list.length <= TOP) return list;
+  const head = list.slice(0, TOP);
+  const tail = list.slice(TOP);
+  const otherDays = tail.reduce((s, x) => s + x.totalDays, 0);
+  const otherCount = tail.reduce((s, x) => s + x.count, 0);
+  if (otherDays <= 0) return head;
+  head.push({
+    label: `Other (${tail.length} more)`,
+    count: otherCount,
+    totalDays: otherDays,
+    avgDays: otherCount ? Math.round(otherDays / otherCount) : 0,
+  });
+  return head;
 };
 
 const buildStayTypePie = (rows, bucket) => {
@@ -448,8 +558,8 @@ const buildStayTypePie = (rows, bucket) => {
         : 0,
       maxDays: shortMax?._durationDays || 0,
       minDays: shortMin?._durationDays || 0,
-      maxDistrict: shortMax?._district || "—",
-      minDistrict: shortMin?._district || "—",
+      maxDistrict: shortMax?._division || "—",
+      minDistrict: shortMin?._division || "—",
     },
     {
       label: "Mature posting",
@@ -466,15 +576,15 @@ const buildStayTypePie = (rows, bucket) => {
         : 0,
       maxDays: trueMax?._durationDays || 0,
       minDays: trueMin?._durationDays || 0,
-      maxDistrict: trueMax?._district || "—",
-      minDistrict: trueMin?._district || "—",
+      maxDistrict: trueMax?._division || "—",
+      minDistrict: trueMin?._division || "—",
     },
   ];
 };
 
 const buildDistrictDesignationStayPie = (rows, bucket, district) => {
   const filtered = filterByBucket(rows, bucket).filter((r) =>
-    district === "All" ? true : safeText(r._district) === safeText(district),
+    district === "All" ? true : safeText(r._division) === safeText(district),
   );
 
   const groups = groupRows(filtered, (r) => r._designation);
@@ -497,6 +607,11 @@ const buildDistrictDesignationStayPie = (rows, bucket, district) => {
 
 /* -------------------------------- charts --------------------------------- */
 const PIE_COLORS = PERFORMANCE_SLICE_COLORS;
+
+const divisionSliceColor = (idx) =>
+  PIE_COLORS[(idx + 3) % PIE_COLORS.length];
+const designationSliceColor = (idx) =>
+  PIE_COLORS[idx % PIE_COLORS.length];
 
 const BUCKET_COLORS = {
   "In Field": PERFORMANCE_SLICE_COLORS[0],
@@ -523,7 +638,9 @@ const CustomTooltip = ({ active, payload, label }) => {
             typeof v === "number" &&
             (p.dataKey === "totalDays" || String(p.name || "").includes("Days"));
           const display =
-            isDays && typeof v === "number" ? `${v} d (${fmtYMDLong(v)})` : v;
+            isDays && typeof v === "number"
+              ? `${v} d (${fmtYMDLong(v)}) · ${formatTenureYearsShort(v)}`
+              : v;
           return (
             <div key={idx} className="text-[11px] font-bold text-slate-700">
               {p.name}:{" "}
@@ -624,10 +741,10 @@ const DecisionInsights = ({ rows, bucket }) => {
     const tru = filtered.filter((r) => r._isTrueStay).length;
     const careerBounds = getCareerCalendarBounds(filtered);
 
-    const distMap = groupRows(filtered, (r) => r._district);
+    const divisionMap = groupRows(filtered, (r) => r._division);
     let topDistrict = null;
     let maxD = 0;
-    for (const [d, g] of Object.entries(distMap)) {
+    for (const [d, g] of Object.entries(divisionMap)) {
       const td = g.reduce((s, r) => s + (r._durationDays || 0), 0);
       if (td > maxD && safeText(d) && d !== "Unknown") {
         maxD = td;
@@ -676,7 +793,7 @@ const DecisionInsights = ({ rows, bucket }) => {
             tone="teal"
             title="Largest tenure concentration"
             body={`${insights.topDistrict.name} — ${fmtYMDLong(insights.topDistrict.days)} summed days across ${insights.topDistrict.postings} posting row(s).`}
-            hint="Sum of segment lengths in this district (same basis as bar charts). Compare with career span below for calendar service length."
+            hint="Sum of segment lengths for this district (same basis as district charts). Compare with career span below for calendar service length."
           />
         ) : null}
 
@@ -954,67 +1071,414 @@ const DistrictWiseStayBarChart = ({ rows, bucket }) => {
   return (
     <SectionCard
       title="District-wise total posting"
-      subtitle="Each bar is cumulative posting tenure in the district (total, average, max, min)"
-      rightLabel={`${data.length} Districts`}
+      subtitle="Cumulative tenure by district — bar height is total days; cards list count, span, average, and min/max stay."
+      rightLabel={`${data.length} districts · ${bucket}`}
+    >
+      {!data.length ? (
+        <div className="relative overflow-hidden rounded-3xl border-2 border-dashed border-cyan-200/70 bg-gradient-to-br from-cyan-50/90 via-white to-teal-50/50 py-16 text-center">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(45,212,191,0.12),transparent_55%)]" />
+          <MapPin className="relative mx-auto h-12 w-12 text-cyan-400" strokeWidth={1.25} />
+          <p className="relative mt-4 text-[15px] font-black text-slate-700">
+            No district data in this scope
+          </p>
+          <p className="relative mx-auto mt-2 max-w-sm text-xs font-semibold text-slate-500">
+            Try another analysis filter or confirm posting history includes district
+            fields.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-12 xl:gap-8">
+          <div className="relative xl:col-span-7">
+            <div className="pointer-events-none absolute -inset-px rounded-[1.35rem] bg-gradient-to-br from-cyan-400/25 via-teal-400/15 to-sky-500/20 blur-sm" />
+            <div className="relative overflow-hidden rounded-3xl border border-cyan-200/60 bg-gradient-to-b from-white via-cyan-50/20 to-white p-4 shadow-[0_20px_50px_-24px_rgba(8,145,178,0.35)] ring-1 ring-cyan-100/80">
+              <div className="mb-2 flex items-center gap-2 px-1">
+                <span className="h-2 w-2 rounded-full bg-gradient-to-r from-teal-400 to-cyan-500 shadow-sm ring-2 ring-white" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-800/80">
+                  Tenure by district
+                </span>
+              </div>
+              <div className="h-[540px] min-h-[400px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={data}
+                    margin={{ top: 20, right: 18, left: 8, bottom: 88 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 6"
+                      stroke="#e2e8f0"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="district"
+                      angle={-32}
+                      textAnchor="end"
+                      interval={0}
+                      height={92}
+                      tick={{
+                        fontSize: 11,
+                        fontWeight: 800,
+                        fill: "#334155",
+                      }}
+                      axisLine={{ stroke: "#cbd5e1" }}
+                      tickLine={{ stroke: "#cbd5e1" }}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fontWeight: 700, fill: "#475569" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend wrapperStyle={{ paddingTop: 16 }} />
+                    <Bar
+                      dataKey="totalDays"
+                      name="Total tenure (days)"
+                      radius={[16, 16, 6, 6]}
+                      maxBarSize={52}
+                    >
+                      {data.map((_, idx) => (
+                        <Cell
+                          key={`db-${idx}`}
+                          fill={PIE_COLORS[idx % PIE_COLORS.length]}
+                          fillOpacity={0.94}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          <div className="xl:col-span-5 space-y-3 max-h-[560px] overflow-auto pr-1 [scrollbar-width:thin]">
+            {data.map((x, idx) => {
+              const accent = PIE_COLORS[idx % PIE_COLORS.length];
+              return (
+                <div
+                  key={`${x.district}-${idx}`}
+                  className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white px-4 py-3.5 shadow-[0_12px_36px_-20px_rgba(15,23,42,0.18)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-22px_rgba(13,148,136,0.28)]"
+                  style={{
+                    borderLeftWidth: 4,
+                    borderLeftColor: accent,
+                  }}
+                >
+                  <div
+                    className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100"
+                    style={{
+                      background: `linear-gradient(105deg, ${accent}12, transparent 42%)`,
+                    }}
+                  />
+                  <div className="relative flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span
+                        className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl text-[11px] font-black text-white shadow-md"
+                        style={{ backgroundColor: accent }}
+                      >
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <div className="text-[14px] font-black leading-snug text-slate-900">
+                          {x.district}
+                        </div>
+                        <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          Rank by total tenure
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      className="shrink-0 rounded-full border border-white/40 px-2.5 py-1 text-[10px] font-black text-white shadow-sm tabular-nums"
+                      style={{ backgroundColor: accent }}
+                    >
+                      {x.count} posts
+                    </span>
+                  </div>
+
+                  <div className="relative mt-3 flex flex-wrap gap-1.5">
+                    <Chip>
+                      Days: {Number(x.totalDays || 0).toLocaleString()}
+                    </Chip>
+                    <Chip>Span: {fmtYMDLong(x.totalDays || 0)}</Chip>
+                    <Chip>Avg: {fmtYMDLong(x.avgDays || 0)}</Chip>
+                    <Chip>Max: {fmtYMDLong(x.maxDays || 0)}</Chip>
+                    <Chip>Min: {fmtYMDLong(x.minDays || 0)}</Chip>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </SectionCard>
+  );
+};
+
+const TEHSIL_BAR_COLORS = [
+  "#7c3aed",
+  "#6366f1",
+  "#8b5cf6",
+  "#a855f7",
+  "#9333ea",
+  "#6d28d9",
+  "#5b21b6",
+  "#4f46e5",
+  "#7e22ce",
+  "#6b21a8",
+  "#818cf8",
+  "#c084fc",
+];
+
+const TehsilWiseStayBarChart = ({ rows, bucket }) => {
+  const data = useMemo(
+    () => buildTehsilStaySummary(rows, bucket),
+    [rows, bucket],
+  );
+
+  return (
+    <SectionCard
+      title="Tehsil-wise total posting"
+      subtitle="Cumulative tenure by tehsil from SUBDIVNAME (sub-division) — same metrics as district view; respects analysis scope above."
+      rightLabel={`${data.length} tehsils · ${bucket}`}
+    >
+      {!data.length ? (
+        <div className="relative overflow-hidden rounded-3xl border-2 border-dashed border-violet-200/70 bg-gradient-to-br from-violet-50/90 via-white to-fuchsia-50/50 py-16 text-center">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(167,139,250,0.14),transparent_55%)]" />
+          <Layers className="relative mx-auto h-12 w-12 text-violet-400" strokeWidth={1.25} />
+          <p className="relative mt-4 text-[15px] font-black text-slate-700">
+            No tehsil data in this scope
+          </p>
+          <p className="relative mx-auto mt-2 max-w-sm text-xs font-semibold text-slate-500">
+            Confirm posting history exposes SUBDIVNAME (or compatible tehsil fields)
+            for this officer.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-12 xl:gap-8">
+          <div className="relative xl:col-span-7">
+            <div className="pointer-events-none absolute -inset-px rounded-[1.35rem] bg-gradient-to-br from-violet-400/25 via-fuchsia-400/15 to-indigo-500/20 blur-sm" />
+            <div className="relative overflow-hidden rounded-3xl border border-violet-200/60 bg-gradient-to-b from-white via-violet-50/25 to-white p-4 shadow-[0_20px_50px_-24px_rgba(109,40,217,0.32)] ring-1 ring-violet-100/80">
+              <div className="mb-2 flex items-center gap-2 px-1">
+                <span className="h-2 w-2 rounded-full bg-gradient-to-r from-violet-400 to-fuchsia-500 shadow-sm ring-2 ring-white" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-800/80">
+                  Tenure by tehsil (SUBDIVNAME)
+                </span>
+              </div>
+              <div className="h-[540px] min-h-[400px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={data}
+                    margin={{ top: 20, right: 18, left: 8, bottom: 96 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 6"
+                      stroke="#e2e8f0"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="tehsil"
+                      angle={-32}
+                      textAnchor="end"
+                      interval={0}
+                      height={100}
+                      tick={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        fill: "#334155",
+                      }}
+                      axisLine={{ stroke: "#cbd5e1" }}
+                      tickLine={{ stroke: "#cbd5e1" }}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fontWeight: 700, fill: "#475569" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend wrapperStyle={{ paddingTop: 16 }} />
+                    <Bar
+                      dataKey="totalDays"
+                      name="Total tenure (days)"
+                      radius={[16, 16, 6, 6]}
+                      maxBarSize={48}
+                    >
+                      {data.map((_, idx) => (
+                        <Cell
+                          key={`tb-${idx}`}
+                          fill={TEHSIL_BAR_COLORS[idx % TEHSIL_BAR_COLORS.length]}
+                          fillOpacity={0.94}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          <div className="xl:col-span-5 space-y-3 max-h-[560px] overflow-auto pr-1 [scrollbar-width:thin]">
+            {data.map((x, idx) => {
+              const accent =
+                TEHSIL_BAR_COLORS[idx % TEHSIL_BAR_COLORS.length];
+              return (
+                <div
+                  key={`${x.tehsil}-${idx}`}
+                  className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white px-4 py-3.5 shadow-[0_12px_36px_-20px_rgba(15,23,42,0.18)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-22px_rgba(109,40,217,0.22)]"
+                  style={{
+                    borderLeftWidth: 4,
+                    borderLeftColor: accent,
+                  }}
+                >
+                  <div
+                    className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100"
+                    style={{
+                      background: `linear-gradient(105deg, ${accent}14, transparent 42%)`,
+                    }}
+                  />
+                  <div className="relative flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span
+                        className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl text-[11px] font-black text-white shadow-md"
+                        style={{ backgroundColor: accent }}
+                      >
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <div className="text-[14px] font-black leading-snug text-slate-900">
+                          {x.tehsil}
+                        </div>
+                        <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          SUBDIVNAME · rank by tenure
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      className="shrink-0 rounded-full border border-white/40 px-2.5 py-1 text-[10px] font-black text-white shadow-sm tabular-nums"
+                      style={{ backgroundColor: accent }}
+                    >
+                      {x.count} posts
+                    </span>
+                  </div>
+
+                  <div className="relative mt-3 flex flex-wrap gap-1.5">
+                    <Chip>
+                      Days: {Number(x.totalDays || 0).toLocaleString()}
+                    </Chip>
+                    <Chip>Span: {fmtYMDLong(x.totalDays || 0)}</Chip>
+                    <Chip>Avg: {fmtYMDLong(x.avgDays || 0)}</Chip>
+                    <Chip>Max: {fmtYMDLong(x.maxDays || 0)}</Chip>
+                    <Chip>Min: {fmtYMDLong(x.minDays || 0)}</Chip>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </SectionCard>
+  );
+};
+
+function TenurePieDetailCard({
+  title,
+  sliceColor,
+  count,
+  totalDays,
+  avgDays,
+  showAvgPosting,
+}) {
+  return (
+    <div
+      className="rounded-2xl border-2 bg-gradient-to-br from-white to-slate-50/90 px-4 py-3.5 shadow-md"
+      style={{ borderColor: sliceColor }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span
+            className="mt-1.5 h-3.5 w-3.5 shrink-0 rounded-sm ring-1 ring-black/15"
+            style={{ backgroundColor: sliceColor }}
+            aria-hidden
+          />
+          <div className="text-[13px] font-black leading-snug text-slate-900 break-words">
+            {title}
+          </div>
+        </div>
+        <span
+          className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black text-white tabular-nums"
+          style={{ backgroundColor: sliceColor }}
+        >
+          {count}
+        </span>
+      </div>
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
+        <Chip>Postings: {count}</Chip>
+        <Chip>
+          Tenure: {formatTenureYearsShort(totalDays)} (
+          {Number(totalDays || 0).toLocaleString()} d)
+        </Chip>
+        <Chip>Span: {fmtYMDLong(totalDays || 0)}</Chip>
+        {showAvgPosting ? (
+          <Chip>Avg / posting: {fmtYMDLong(avgDays || 0)}</Chip>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+const IN_FIELD_SCOPE = "In Field";
+
+export const DivisionTenurePieChart = ({ rows }) => {
+  const data = useMemo(
+    () => buildDistrictTenurePieData(rows, IN_FIELD_SCOPE),
+    [rows],
+  );
+
+  return (
+    <SectionCard
+      title="District-wise tenure (In Field)"
+      rightLabel={IN_FIELD_SCOPE}
     >
       {!data.length ? (
         <div className="rounded-2xl border border-dashed border-cyan-200/80 bg-cyan-50/40 py-12 text-center text-sm font-bold text-slate-500">
-          No district data found.
+          No In Field district data for this officer.
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-          <div className="xl:col-span-7 h-[520px] min-h-[420px]">
+          <div className="xl:col-span-8 h-[640px] min-h-[440px] overflow-visible">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={data}
-                margin={{ top: 16, right: 26, left: 4, bottom: 82 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="district"
-                  angle={-28}
-                  textAnchor="end"
-                  interval={0}
-                  height={86}
-                  tick={{ fontSize: 11, fontWeight: 700 }}
-                />
-                <YAxis tick={{ fontSize: 11, fontWeight: 700 }} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend />
-                <Bar
+              <PieChart margin={TENURE_PIE_MARGIN}>
+                <Pie
+                  data={data}
                   dataKey="totalDays"
-                  name="Total posting (days)"
-                  fill="#0284c7"
-                  radius={[8, 8, 0, 0]}
-                />
-              </BarChart>
+                  nameKey="label"
+                  cx="50%"
+                  cy="50%"
+                  {...TENURE_PIE_DONUT}
+                  label={tenurePieSliceLabel}
+                  labelLine={{ stroke: "#64748b", strokeWidth: 1 }}
+                >
+                  {data.map((entry, idx) => (
+                    <Cell
+                      key={idx}
+                      fill={divisionSliceColor(idx)}
+                      {...DONUT_CELL_STROKE}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ paddingTop: 12 }} />
+              </PieChart>
             </ResponsiveContainer>
           </div>
 
-          <div className="xl:col-span-5 space-y-3 max-h-[520px] overflow-auto pr-1">
+          <div className="xl:col-span-4 space-y-3 max-h-[640px] overflow-auto pr-1">
             {data.map((x, idx) => (
-              <div
-                key={`${x.district}-${idx}`}
-                className="rounded-2xl border border-cyan-100/80 bg-gradient-to-br from-white to-cyan-50/35 px-4 py-3.5 shadow-[0_10px_30px_-16px_rgba(8,145,178,0.18)]"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="text-[13px] font-black text-slate-900">
-                    {x.district}
-                  </div>
-                  <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black text-white bg-cyan-600">
-                    {x.count}
-                  </span>
-                </div>
-
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <Chip>Count: {x.count}</Chip>
-                  <Chip>Posting (days): {Number(x.totalDays || 0).toLocaleString()}</Chip>
-                  <Chip>Total posting: {fmtYMDLong(x.totalDays || 0)}</Chip>
-                  <Chip>Avg posting: {fmtYMDLong(x.avgDays || 0)}</Chip>
-                  <Chip>Max: {fmtYMDLong(x.maxDays || 0)}</Chip>
-                  <Chip>Min: {fmtYMDLong(x.minDays || 0)}</Chip>
-                </div>
-              </div>
+              <TenurePieDetailCard
+                key={`${x.label}-${idx}`}
+                title={x.label}
+                sliceColor={divisionSliceColor(idx)}
+                count={x.count}
+                totalDays={x.totalDays}
+                avgDays={x.avgDays}
+                showAvgPosting
+              />
             ))}
           </div>
         </div>
@@ -1023,74 +1487,62 @@ const DistrictWiseStayBarChart = ({ rows, bucket }) => {
   );
 };
 
-const DesignationPieChart = ({ rows, bucket }) => {
+const DesignationPieChart = ({ rows }) => {
   const data = useMemo(
-    () => buildDesignationDistribution(rows, bucket).slice(0, 8),
-    [rows, bucket],
+    () => buildDesignationDistribution(rows, IN_FIELD_SCOPE).slice(0, 8),
+    [rows],
   );
 
   return (
     <SectionCard
-      title="Designation-wise Distribution"
-      subtitle="Overall designation split in selected posting type along with tenure"
-      rightLabel={`${data.length} Designations`}
+      title="Designation-wise tenure (In Field)"
+      subtitle="In Field postings only. Slice size = cumulative posting days per designation; labels show % and years."
+      rightLabel={`${data.length} · ${IN_FIELD_SCOPE}`}
     >
       {!data.length ? (
         <div className="rounded-2xl border border-dashed border-violet-200/80 bg-violet-50/40 py-12 text-center text-sm font-bold text-slate-500">
-          No data found.
+          No In Field designation data for this officer.
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-          <div className="xl:col-span-7 h-[520px] min-h-[420px] overflow-visible">
+          <div className="xl:col-span-8 h-[640px] min-h-[440px] overflow-visible">
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart margin={PIE_CHART_MARGIN}>
+              <PieChart margin={TENURE_PIE_MARGIN}>
                 <Pie
                   data={data}
-                  dataKey="count"
+                  dataKey="totalDays"
                   nameKey="label"
                   cx="50%"
                   cy="50%"
-                  {...DONUT_LONG_NAME}
-                  label={pieSliceLabel}
+                  {...TENURE_PIE_DONUT}
+                  label={tenurePieSliceLabel}
                   labelLine={{ stroke: "#64748b", strokeWidth: 1 }}
                 >
                   {data.map((entry, idx) => (
                     <Cell
                       key={idx}
-                      fill={PIE_COLORS[idx % PIE_COLORS.length]}
+                      fill={designationSliceColor(idx)}
                       {...DONUT_CELL_STROKE}
                     />
                   ))}
                 </Pie>
                 <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{ paddingTop: 8 }} />
+                <Legend wrapperStyle={{ paddingTop: 12 }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
 
-          <div className="xl:col-span-5 space-y-3 max-h-[520px] overflow-auto pr-1">
+          <div className="xl:col-span-4 space-y-3 max-h-[640px] overflow-auto pr-1">
             {data.map((x, idx) => (
-              <div
+              <TenurePieDetailCard
                 key={`${x.label}-${idx}`}
-                className="rounded-2xl border border-violet-100/80 bg-gradient-to-br from-white to-violet-50/30 px-4 py-3.5 shadow-[0_10px_30px_-16px_rgba(124,58,237,0.2)]"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="text-[13px] font-black text-slate-900">
-                    {x.label}
-                  </div>
-                  <span
-                    className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-black text-white"
-                    style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }}
-                  >
-                    {x.count}
-                  </span>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <Chip>Count: {x.count}</Chip>
-                  <Chip>Posting (days): {Number(x.totalDays || 0).toLocaleString()}</Chip>
-                  <Chip>Posting tenure: {fmtYMDLong(x.totalDays || 0)}</Chip>
-                </div>
-              </div>
+                title={x.label}
+                sliceColor={designationSliceColor(idx)}
+                count={x.count}
+                totalDays={x.totalDays}
+                avgDays={x.avgDays}
+                showAvgPosting={false}
+              />
             ))}
           </div>
         </div>
@@ -1251,7 +1703,7 @@ const PostingDashboard = ({ items }) => {
             </h2>
             <p className="mt-1 max-w-2xl text-xs font-semibold leading-relaxed text-slate-600 sm:text-sm">
               Filter by scope, scan decision-ready insights and KPIs, then drill
-              into charts for districts and designations.
+              into charts for districts, tehsils (SUBDIVNAME), and designations.
             </p>
           </div>
         </div>
@@ -1284,9 +1736,14 @@ const PostingDashboard = ({ items }) => {
       <BucketPie rows={items} />
 
       <StayTypePieChart rows={items} bucket={activeBucket} />
-      <DistrictWiseStayBarChart rows={items} bucket={activeBucket} />
 
-      <DesignationPieChart rows={items} bucket={activeBucket} />
+      <div className="space-y-6">
+        <DivisionTenurePieChart rows={items} />
+        <DesignationPieChart rows={items} />
+      </div>
+
+      <DistrictWiseStayBarChart rows={items} bucket={activeBucket} />
+      <TehsilWiseStayBarChart rows={items} bucket={activeBucket} />
     </div>
   );
 };

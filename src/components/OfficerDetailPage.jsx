@@ -14,6 +14,7 @@ export default function OfficerDetailPage({ onLogout }) {
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const DEBUG_PERF = false;
 
   const [q, setQ] = useState("");
   const [searchColumn, setSearchColumn] = useState("all");
@@ -286,27 +287,76 @@ export default function OfficerDetailPage({ onLogout }) {
     return DIVISION_COLORS_9[idx];
   };
 
-  const dsjTehsilByDistrict = useMemo(() => {
-    const map = new Map();
+  /**
+   * PERF: Precompute expensive derived fields once per fetch so filtering/sorting
+   * and rendering a large grid doesn't repeatedly parse dates.
+   *
+   * IMPORTANT: This must be defined before any hook that uses `baseRows`.
+   */
+  const baseRows = useMemo(() => {
+    const list = Array.isArray(rows) ? rows : [];
+    return list.map((r) => {
+      const desigId = String(getDesigId(r) ?? "").trim();
+      const desigDesc = String(getDesigDesc(r) ?? "").trim();
+      const cadreLabel = String(getCadreLabel(r) ?? "").trim();
 
-    rows.forEach((r) => {
+      const districtIdNum = toNumberSafe(getDistrictId(r));
+      const tehsilIdNum = toNumberSafe(getTehsilId(r));
+      const listNoNum = toNumberSafe(getListNo(r));
+
+      const dobFmt = formatDDMMYYYY(r.DOB) || "";
+      const dojFmt = formatDDMMYYYY(r.DOJ) || "";
+      const dopFmt = formatDDMMYYYY(r.DATEOFPOSTING) || "";
+      const dopTime = toSortableTime(r.DATEOFPOSTING);
+      const postingTenure = r.DATEOFPOSTING
+        ? formatPostingTenure(r.DATEOFPOSTING)
+        : "—";
+
+      return {
+        ...r,
+        _desigId: desigId,
+        _desigDesc: desigDesc,
+        _cadreLabel: cadreLabel,
+        _districtIdNum: districtIdNum,
+        _tehsilIdNum: tehsilIdNum,
+        _listNoNum: listNoNum,
+        _dobFmt: dobFmt,
+        _dojFmt: dojFmt,
+        _dopFmt: dopFmt,
+        _dopTime: dopTime,
+        _postingTenure: postingTenure,
+      };
+    });
+  }, [rows]);
+
+  /** Single tehsil name per district only when exactly one tehsil has a D&SJ posting (avoids misleading badge). */
+  const dsjTehsilByDistrict = useMemo(() => {
+    const districtToTehsils = new Map();
+
+    baseRows.forEach((r) => {
       const district = normalizeText(r.DISTRICTNAME);
       const tehsil = normalizeText(r.SUBDIVNAME);
 
       if (!district || !tehsil) return;
       if (!isDSJDesignation(r)) return;
 
-      if (!map.has(district)) {
-        map.set(district, tehsil);
+      if (!districtToTehsils.has(district)) {
+        districtToTehsils.set(district, new Set());
       }
+      districtToTehsils.get(district).add(tehsil);
     });
 
+    const map = new Map();
+    districtToTehsils.forEach((set, district) => {
+      if (set.size === 1) {
+        map.set(district, [...set][0]);
+      }
+    });
     return map;
-  }, [rows]);
+  }, [baseRows]);
 
   const compareDistrictTehsilList = (a, b) => {
-    const distDiff =
-      toNumberSafe(getDistrictId(a)) - toNumberSafe(getDistrictId(b));
+    const distDiff = (a._districtIdNum ?? 0) - (b._districtIdNum ?? 0);
     if (distDiff !== 0) return distDiff;
 
     const districtA = normalizeText(a.DISTRICTNAME);
@@ -326,32 +376,32 @@ export default function OfficerDetailPage({ onLogout }) {
     }
 
     const tehsilDiff =
-      toNumberSafe(getTehsilId(a)) - toNumberSafe(getTehsilId(b));
+      (a._tehsilIdNum ?? 0) - (b._tehsilIdNum ?? 0);
     if (tehsilDiff !== 0) return tehsilDiff;
 
     const tehsilNameDiff = byAlpha(aTehsil, bTehsil);
     if (tehsilNameDiff !== 0) return tehsilNameDiff;
 
-    const [a1, a2] = desigIdToParts(getDesigId(a));
-    const [b1, b2] = desigIdToParts(getDesigId(b));
+    const [a1, a2] = desigIdToParts(a._desigId ?? getDesigId(a));
+    const [b1, b2] = desigIdToParts(b._desigId ?? getDesigId(b));
 
     if (a1 !== b1) return a1 - b1;
     if (a2 !== b2) return a2 - b2;
 
-    const listDiff = toNumberSafe(getListNo(a)) - toNumberSafe(getListNo(b));
+    const listDiff = (a._listNoNum ?? 0) - (b._listNoNum ?? 0);
     if (listDiff !== 0) return listDiff;
 
     return byAlpha(a.OFFICERNAME, b.OFFICERNAME);
   };
 
   const compareDesignationList = (a, b) => {
-    const [a1, a2] = desigIdToParts(getDesigId(a));
-    const [b1, b2] = desigIdToParts(getDesigId(b));
+    const [a1, a2] = desigIdToParts(a._desigId ?? getDesigId(a));
+    const [b1, b2] = desigIdToParts(b._desigId ?? getDesigId(b));
 
     if (a1 !== b1) return a1 - b1;
     if (a2 !== b2) return a2 - b2;
 
-    const listDiff = toNumberSafe(getListNo(a)) - toNumberSafe(getListNo(b));
+    const listDiff = (a._listNoNum ?? 0) - (b._listNoNum ?? 0);
     if (listDiff !== 0) return listDiff;
 
     return byAlpha(a.OFFICERNAME, b.OFFICERNAME);
@@ -405,7 +455,7 @@ export default function OfficerDetailPage({ onLogout }) {
           cadre,
         });
         if (!mounted) return;
-        setRows(data || []);
+        setRows(Array.isArray(data) ? data : []);
       } catch (e) {
         console.error("OfficerDetailPage load error:", e);
         if (!mounted) return;
@@ -435,7 +485,7 @@ export default function OfficerDetailPage({ onLogout }) {
     const selectedDistrictKey = normalizeText(selectedDistrict);
     const preferredTehsil = dsjTehsilByDistrict.get(selectedDistrictKey);
 
-    rows.forEach((r) => {
+    baseRows.forEach((r) => {
       const district = normalizeText(r.DISTRICTNAME);
       const tehsil = normalizeText(r.SUBDIVNAME) || "Unknown";
       const tehsilId = getTehsilId(r);
@@ -463,12 +513,12 @@ export default function OfficerDetailPage({ onLogout }) {
 
       return byAlpha(a.name, b.name);
     });
-  }, [rows, selectedDistrict, dsjTehsilByDistrict]);
+  }, [baseRows, selectedDistrict, dsjTehsilByDistrict]);
 
   const cadreTiles = useMemo(() => {
     const map = new Map();
 
-    rows.forEach((r) => {
+    baseRows.forEach((r) => {
       const districtOk = selectedDistrict
         ? normalizeText(r.DISTRICTNAME) === normalizeText(selectedDistrict)
         : true;
@@ -479,7 +529,7 @@ export default function OfficerDetailPage({ onLogout }) {
 
       if (!districtOk || !tehsilOk) return;
 
-      const c = getCadreLabel(r);
+      const c = r._cadreLabel ?? getCadreLabel(r);
 
       if (!map.has(c)) {
         map.set(c, { name: c, count: 0 });
@@ -499,11 +549,12 @@ export default function OfficerDetailPage({ onLogout }) {
       if (ao !== bo) return ao - bo;
       return byAlpha(a.name, b.name);
     });
-  }, [rows, selectedDistrict, selectedTehsil]);
+  }, [baseRows, selectedDistrict, selectedTehsil]);
 
   const filtered = useMemo(() => {
+    const t0 = DEBUG_PERF && typeof performance !== "undefined" ? performance.now() : 0;
     const query = q.trim().toLowerCase();
-    let list = rows;
+    let list = baseRows;
 
     if (query) {
       const getColumnText = (r, col) => {
@@ -517,9 +568,9 @@ export default function OfficerDetailPage({ onLogout }) {
           case "cr":
             return String(r.CRNO ?? "");
           case "designation":
-            return String(getDesigDesc(r) ?? "");
+            return String(r._desigDesc ?? "");
           case "designationId":
-            return String(getDesigId(r) ?? "");
+            return String(r._desigId ?? "");
           case "postingDistrict":
           case "district":
             return String(r.DISTRICTNAME ?? "");
@@ -527,7 +578,7 @@ export default function OfficerDetailPage({ onLogout }) {
           case "tehsil":
             return String(r.SUBDIVNAME ?? "");
           case "cadre":
-            return String(getCadreLabel(r) ?? "");
+            return String(r._cadreLabel ?? "");
           case "domicile":
             return String(r.DOMICILE ?? "");
           case "cnic":
@@ -535,11 +586,11 @@ export default function OfficerDetailPage({ onLogout }) {
           case "mobile":
             return String(r.MOBILE ?? "");
           case "dob":
-            return String(formatDDMMYYYY(r.DOB) ?? "");
+            return String(r._dobFmt ?? "");
           case "doj":
-            return String(formatDDMMYYYY(r.DOJ) ?? "");
+            return String(r._dojFmt ?? "");
           case "dop":
-            return String(formatDDMMYYYY(r.DATEOFPOSTING) ?? "");
+            return String(r._dopFmt ?? "");
           case "listNo":
             return String(getListNo(r) ?? "");
           case "blood":
@@ -566,12 +617,12 @@ export default function OfficerDetailPage({ onLogout }) {
           r.NICNO,
           r.BLOODG,
           r.MOBILE,
-          formatDDMMYYYY(r.DOB),
-          formatDDMMYYYY(r.DOJ),
-          formatDDMMYYYY(r.DATEOFPOSTING),
-          getDesigId(r),
-          getDesigDesc(r),
-          getCadreLabel(r),
+          r._dobFmt,
+          r._dojFmt,
+          r._dopFmt,
+          r._desigId,
+          r._desigDesc,
+          r._cadreLabel,
           getCadreValue(r),
           getListNo(r),
         ]
@@ -596,7 +647,7 @@ export default function OfficerDetailPage({ onLogout }) {
     }
 
     if (selectedCadre) {
-      list = list.filter((r) => getCadreLabel(r) === selectedCadre);
+      list = list.filter((r) => (r._cadreLabel ?? getCadreLabel(r)) === selectedCadre);
     }
 
     const sorted = [...list];
@@ -629,19 +680,19 @@ export default function OfficerDetailPage({ onLogout }) {
         break;
 
       case "desig_az":
-        sorted.sort((a, b) => byAlpha(getDesigDesc(a), getDesigDesc(b)));
+        sorted.sort((a, b) => byAlpha(a._desigDesc, b._desigDesc));
         break;
 
       case "desig_za":
-        sorted.sort((a, b) => byAlpha(getDesigDesc(b), getDesigDesc(a)));
+        sorted.sort((a, b) => byAlpha(b._desigDesc, a._desigDesc));
         break;
 
       case "cadre_az":
-        sorted.sort((a, b) => byAlpha(getCadreLabel(a), getCadreLabel(b)));
+        sorted.sort((a, b) => byAlpha(a._cadreLabel, b._cadreLabel));
         break;
 
       case "cadre_za":
-        sorted.sort((a, b) => byAlpha(getCadreLabel(b), getCadreLabel(a)));
+        sorted.sort((a, b) => byAlpha(b._cadreLabel, a._cadreLabel));
         break;
 
       case "name_az":
@@ -669,17 +720,11 @@ export default function OfficerDetailPage({ onLogout }) {
         break;
 
       case "dop_old":
-        sorted.sort(
-          (a, b) =>
-            toSortableTime(a.DATEOFPOSTING) - toSortableTime(b.DATEOFPOSTING),
-        );
+        sorted.sort((a, b) => (a._dopTime ?? 0) - (b._dopTime ?? 0));
         break;
 
       case "dop_new":
-        sorted.sort(
-          (a, b) =>
-            toSortableTime(b.DATEOFPOSTING) - toSortableTime(a.DATEOFPOSTING),
-        );
+        sorted.sort((a, b) => (b._dopTime ?? 0) - (a._dopTime ?? 0));
         break;
 
       default:
@@ -688,7 +733,7 @@ export default function OfficerDetailPage({ onLogout }) {
 
     return sorted;
   }, [
-    rows,
+    baseRows,
     q,
     searchColumn,
     sort,
@@ -698,16 +743,14 @@ export default function OfficerDetailPage({ onLogout }) {
     dsjTehsilByDistrict,
   ]);
 
+  // (perf logs removed)
+
   const totalDistrictCount = districtTehsilTiles.reduce(
     (sum, t) => sum + t.count,
     0,
   );
 
   const totalCadreCount = cadreTiles.reduce((sum, t) => sum + t.count, 0);
-
-  const preferredTehsilForSelectedDistrict = selectedDistrict
-    ? dsjTehsilByDistrict.get(normalizeText(selectedDistrict))
-    : null;
 
   const tdBase =
     "py-2 px-3 align-top text-slate-800 font-semibold border-b border-slate-200/60 whitespace-nowrap";
@@ -726,7 +769,7 @@ export default function OfficerDetailPage({ onLogout }) {
 
   return (
     <Layout onLogout={onLogout}>
-      <div className="relative bg-slate-50 px-4 py-2 h-[calc(100vh-88px)] overflow-hidden">
+      <div className="relative bg-slate-50 px-4 py-2 pb-8">
         <div className="pointer-events-none absolute -top-24 -right-24 h-80 w-80 rounded-full bg-sky-200/40 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-24 h-80 w-80 rounded-full bg-amber-200/30 blur-3xl" />
 
@@ -759,9 +802,9 @@ export default function OfficerDetailPage({ onLogout }) {
           <div className="w-[64px] shrink-0" />
         </div>
 
-        <div className="relative z-10 bg-white/80 backdrop-blur border border-slate-200/60 rounded-2xl p-3 shadow-sm h-[calc(100%-44px)] flex flex-col min-h-0 gap-2">
-          {/* Summary tiles: cap at 30% of card so the grid keeps ~70% */}
-          <div className="max-h-[30%] min-h-0 shrink-0 overflow-y-auto flex flex-col gap-3">
+        <div className="relative z-10 bg-white/80 backdrop-blur border border-slate-200/60 rounded-2xl p-3 shadow-sm flex flex-col gap-2">
+          {/* Summary tiles — flows with page; vertical scroll is on the window */}
+          <div className="shrink-0 flex flex-col gap-3">
           <div className="rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm shrink-0">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div>
@@ -776,9 +819,6 @@ export default function OfficerDetailPage({ onLogout }) {
                     : designationId === "ALL"
                       ? "All Officers"
                       : designation}
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  Click a cadre tile to filter table
                 </div>
               </div>
 
@@ -861,12 +901,6 @@ export default function OfficerDetailPage({ onLogout }) {
                   <div className="text-sm md:text-base font-extrabold text-slate-900">
                     {selectedDistrict}
                   </div>
-                  <div className="text-[11px] text-slate-500">
-                    Click a tehsil tile to filter table
-                    {preferredTehsilForSelectedDistrict
-                      ? ` • D&SJ tehsil first: ${preferredTehsilForSelectedDistrict}`
-                      : ""}
-                  </div>
                 </div>
 
                 <div className="flex flex-wrap gap-1.5">
@@ -925,10 +959,6 @@ export default function OfficerDetailPage({ onLogout }) {
 
                   {districtTehsilTiles.map((tile) => {
                     const active = selectedTehsil === tile.name;
-                    const isPreferred =
-                      preferredTehsilForSelectedDistrict &&
-                      normalizeText(tile.name) ===
-                        normalizeText(preferredTehsilForSelectedDistrict);
 
                     return (
                       <button
@@ -947,17 +977,9 @@ export default function OfficerDetailPage({ onLogout }) {
                       >
                         <div className="absolute inset-0 bg-white/0 group-hover:bg-white/5 transition" />
                         <div className="relative z-10 flex h-full flex-col justify-between">
-                          <div className="flex items-center justify-between gap-1">
-                            <div className="text-[11px] font-bold leading-tight break-words">
-                              {tile.name}
-                            </div>
-                            {isPreferred && (
-                              <div className="text-[8px] font-bold opacity-95">
-                                D&SJ
-                              </div>
-                            )}
+                          <div className="text-[11px] font-bold leading-tight break-words">
+                            {tile.name}
                           </div>
-
                           <div className="mt-1 text-base font-bold leading-none">
                             {tile.count}
                           </div>
@@ -971,8 +993,8 @@ export default function OfficerDetailPage({ onLogout }) {
           )}
           </div>
 
-          {/* Grid + toolbar: fills remaining height (~70% when tiles use their cap) */}
-          <div className="flex-1 min-h-0 flex flex-col gap-0 rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          {/* Grid + toolbar — full width; table grows with content; page scrolls */}
+          <div className="flex flex-col gap-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div
             className={`${gridToolbarClass} flex flex-wrap items-center justify-between gap-1.5 px-2 py-1.5`}
           >
@@ -1054,9 +1076,9 @@ export default function OfficerDetailPage({ onLogout }) {
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="w-full">
             <table className="table-fixed w-full text-xs">
-              <thead className="sticky top-0 z-10">
+              <thead className="sticky top-[88px] z-10 shadow-sm">
                 <tr className="text-left">
                   <th className="py-2 px-2 w-[130px] font-bold text-white bg-gradient-to-r from-sky-600 to-indigo-700 !whitespace-normal break-words">
                     Name
@@ -1164,7 +1186,7 @@ export default function OfficerDetailPage({ onLogout }) {
                       <td
                         className={`${tdBase} !whitespace-normal break-words leading-tight`}
                       >
-                        {getCadreLabel(r)}
+                        {getCadreLabel(r) || "—"}
                       </td>
 
                       <td
@@ -1232,9 +1254,7 @@ export default function OfficerDetailPage({ onLogout }) {
                       </td>
 
                       <td className={`${tdBase} whitespace-nowrap`}>
-                        {r.DATEOFPOSTING
-                          ? formatPostingTenure(r.DATEOFPOSTING)
-                          : "—"}
+                        {r.DATEOFPOSTING ? formatPostingTenure(r.DATEOFPOSTING) : "—"}
                       </td>
 
                       <td className={tdBase}>

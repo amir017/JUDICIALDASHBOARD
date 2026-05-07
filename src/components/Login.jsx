@@ -65,7 +65,7 @@ function Login({ onLogin }) {
 
           {/* Subtitle */}
           <p className="text-indigo-500 mb-8 text-sm font-semibold">
-            Integrated Judicial Performance & Management System
+            Integrated Judicial Officers Performance & Management System (ERP)
           </p>
 
           {/* Error */}

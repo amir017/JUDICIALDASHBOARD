@@ -1,6 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Calendar, IdCard, Phone, MapPin, Home } from "lucide-react";
+import {
+  Calendar,
+  IdCard,
+  Phone,
+  MapPin,
+  Home,
+  HeartPulse,
+  AlertTriangle,
+} from "lucide-react";
 import Layout from "./Layout";
 import Api from "../API/Api";
 
@@ -20,6 +28,7 @@ import InquiryTab from "../pages/officer/tabs/InquiryTab";
 import ExamsTab from "../pages/officer/tabs/ExamsTab.jsx";
 import PerformanceTab from "../pages/officer/tabs/PerformanceTab.jsx";
 import ACRTab from "../pages/officer/tabs/ACRTab.jsx";
+import OverallInsightsTab from "../pages/officer/tabs/OverallInsightsTab.jsx";
 
 import {
   safeText,
@@ -69,6 +78,29 @@ const FancyCard = ({ icon: Icon, label, value }) => (
     </div>
   </div>
 );
+
+/** Life-threatening conditions from profile API (`LIF_THREAT`), comma-separated in parentheses. */
+const LifeThreatCard = ({ text }) => {
+  const v = safeText(text);
+  if (v === "—") return null;
+  return (
+    <div className="rounded-2xl border border-rose-400/55 bg-gradient-to-br from-rose-950/35 via-rose-900/25 to-red-950/30 backdrop-blur px-3 py-2.5 shadow-sm ring-1 ring-rose-300/40">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-rose-300/50 bg-rose-500/25">
+          <HeartPulse size={15} className="text-rose-100" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[8px] font-bold uppercase tracking-wider text-rose-100/85">
+            Life-threatening disease(s)
+          </div>
+          <div className="mt-1 text-[12px] font-semibold leading-snug text-white break-words">
+            {v}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const AddressCard = ({ address, label = "Address" }) => {
   const [open, setOpen] = useState(false);
@@ -259,6 +291,16 @@ const WedlockProfileCard = ({
   location,
   officerHeroGradient = "from-emerald-700 via-teal-600 to-sky-600",
 }) => {
+  const spousePictureSrc = useMemo(() => {
+    if (!profile) return null;
+    const b64 =
+      profile.SPOUSE_PHOTO_BASE64 || profile.SPOUSE_PHOTOBASE64;
+    const mime = profile.SPOUSE_PHOTO_MIME;
+    if (b64)
+      return `data:${mime || "image/jpeg"};base64,${b64}`;
+    return profile.SPOUSE_PHOTO_URL || profile.SPOUSE_PHOTOURL || null;
+  }, [profile]);
+
   const spouseId = safeText(profile?.SPOUSE_OFFICERID);
   const spouseName = safeText(profile?.SPOUSE_OFFICERNAME);
   const spouseDesig = safeText(profile?.SPOUSE_DESIGNATIONDESC);
@@ -294,7 +336,14 @@ const WedlockProfileCard = ({
     : "from-violet-600 via-purple-600 to-fuchsia-700";
 
   return (
-    <div className="rounded-2xl overflow-hidden border shadow-sm bg-white/80 backdrop-blur">
+    <div
+      className={[
+        "rounded-2xl overflow-hidden border shadow-sm bg-white/80 backdrop-blur transition-shadow",
+        !same && show && !postingLoading
+          ? "ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-50 shadow-[0_0_28px_-4px_rgba(251,191,36,0.65)]"
+          : "",
+      ].join(" ")}
+    >
       <div className={`relative bg-gradient-to-r ${spouseHero} p-3`}>
         <div className="pointer-events-none absolute -top-10 -right-10 h-40 w-40 rounded-full bg-white/15 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-12 -left-12 h-44 w-44 rounded-full bg-white/10 blur-3xl" />
@@ -303,9 +352,29 @@ const WedlockProfileCard = ({
           <div className="absolute inset-0 bg-white/10 animate-pulse pointer-events-none" />
         ) : null}
 
+        {!same && show && !postingLoading ? (
+          <div className="relative mb-3 flex items-start gap-2 rounded-xl border border-amber-300/90 bg-amber-500/95 px-3 py-2 text-[11px] font-black uppercase tracking-wide text-amber-950 shadow-md">
+            <AlertTriangle
+              className="mt-0.5 h-4 w-4 shrink-0 text-amber-950"
+              aria-hidden
+            />
+            <span>
+              Spouse is posted in a different district.
+            </span>
+          </div>
+        ) : null}
+
         <div className="relative flex gap-2">
-          <div className="h-[60px] w-[60px] rounded-xl bg-white/15 border border-white/25 overflow-hidden flex items-center justify-center text-white font-bold">
-            {getInitials(spouseName)}
+          <div className="h-[68px] w-[68px] shrink-0 rounded-xl bg-white/15 border-2 border-white/35 overflow-hidden flex items-center justify-center text-white font-bold shadow-inner">
+            {spousePictureSrc ? (
+              <img
+                src={spousePictureSrc}
+                alt={`${spouseName} photo`}
+                className="h-full w-full object-cover object-top"
+              />
+            ) : (
+              getInitials(spouseName)
+            )}
           </div>
 
           <div className="text-white flex-1 min-w-0">
@@ -344,10 +413,10 @@ const WedlockProfileCard = ({
 
               <span
                 className={[
-                  "px-2 py-0.5 rounded-full text-[10px] font-semibold border",
+                  "px-2 py-0.5 rounded-full text-[10px] font-black border",
                   same
                     ? "bg-white/20 border-white/30 text-white"
-                    : "bg-white/10 border-white/20 text-white/90",
+                    : "animate-pulse bg-amber-300 border-amber-600 text-amber-950 shadow-sm",
                 ].join(" ")}
               >
                 {same ? "Same District" : "Different District"}
@@ -651,9 +720,14 @@ export default function OfficerProfilePage({ onLogout }) {
     (async () => {
       try {
         setRelationshipLoading(true);
-        const rows = await Api.getOfficerRelationships({ officerId });
+        const raw = await Api.getOfficerRelationships({ officerId });
         if (cancelled) return;
-        setRelationshipRows(Array.isArray(rows) ? rows : []);
+        const rows = Array.isArray(raw)
+          ? raw
+          : Array.isArray(raw?.rows)
+            ? raw.rows
+            : [];
+        setRelationshipRows(rows);
         tabDataOfficerRef.current.relationships = officerId;
       } catch (e) {
         console.error("OfficerProfilePage relationships load error:", e);
@@ -758,7 +832,8 @@ export default function OfficerProfilePage({ onLogout }) {
   }, [officerId, activeTab]);
 
   useEffect(() => {
-    if (!officerId || activeTab !== "acr") return;
+    if (!officerId || (activeTab !== "acr" && activeTab !== "overallInsights"))
+      return;
     if (tabDataOfficerRef.current.acr === officerId) return;
     let cancelled = false;
     (async () => {
@@ -804,6 +879,12 @@ export default function OfficerProfilePage({ onLogout }) {
   const ADDRESS = safeText(
     profile?.ADDRESS || profile?.HOMEADDRESS || profile?.PERMANENTADDRESS,
   );
+
+  const lifeThreatRaw =
+    profile?.LIF_THREAT ??
+    profile?.LIFETHREAT ??
+    profile?.lif_threat ??
+    profile?.Lif_Threat;
 
   return (
     <Layout onLogout={onLogout}>
@@ -859,8 +940,9 @@ export default function OfficerProfilePage({ onLogout }) {
                   <FancyCard icon={Calendar} label="DOB" value={DOB} />
                 </div>
 
-                <div className="mt-2">
+                <div className="mt-2 space-y-2">
                   <AddressCard address={ADDRESS} />
+                  <LifeThreatCard text={lifeThreatRaw} />
                 </div>
               </div>
             </div>
@@ -886,6 +968,13 @@ export default function OfficerProfilePage({ onLogout }) {
                 <div className="font-semibold mb-2">Details</div>
 
                 <div className="flex gap-2 flex-wrap">
+                  <ToggleBtn
+                    active={activeTab === "overallInsights"}
+                    onClick={() => setActiveTab("overallInsights")}
+                  >
+                    Overall Insights
+                  </ToggleBtn>
+
                   <ToggleBtn
                     active={activeTab === "postingAnalysis"}
                     onClick={() => setActiveTab("postingAnalysis")}
@@ -995,7 +1084,15 @@ export default function OfficerProfilePage({ onLogout }) {
             </div>
 
             <div className="w-full overflow-x-auto">
-              {activeTab === "postingAnalysis" ? (
+              {activeTab === "overallInsights" ? (
+                <OverallInsightsTab
+                  profile={profile}
+                  historyRows={historyRows}
+                  historyLoading={historyLoading}
+                  acrRows={acrRows}
+                  acrLoading={acrLoading}
+                />
+              ) : activeTab === "postingAnalysis" ? (
                 <PostingTransfersTab
                   historyRows={historyRows}
                   historyLoading={historyLoading}

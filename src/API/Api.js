@@ -164,9 +164,10 @@ class Api {
     return res.data;
   }
   /**
-   * Posting history: when joined to designation (e.g. SUBJUDICARY), expose per-row
-   * `MATUREPERIOD` and `SHORTPERIOD` (days) so posting analytics can use designation rules:
-   * SELECT d.DESIGNATIONID, d.DESIGNATIONDESC, d.MATUREPERIOD, d.SHORTPERIOD FROM designation d
+   * Posting history from V_POSTING_HISTORY (or equivalent). Include `DIVISIONNAME`
+   * and `SUBDIVNAME` for district / tehsil tenure charts. When joined
+   * to designation (e.g. SUBJUDICARY), expose per-row `MATUREPERIOD` and `SHORTPERIOD`
+   * (days) for posting analytics.
    */
   async getOfficerPostingHistory({ officerId }) {
     const res = await this.axiosInstance.get("/dj/getOfficerPostingHistory", {

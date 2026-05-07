@@ -622,8 +622,8 @@ export default function DashboardSinglePage({ onLogout }) {
                         : "ring-1 ring-white/20"
                     }`}
                 >
-                  <div className="text-[11px] uppercase tracking-widest font-bold text-white/90">
-                    TOTAL
+                  <div className="text-[11px] font-bold text-white/90 text-center leading-tight">
+                    Total Judicial Officers
                   </div>
                   <div className="text-[20px] md:text-[22px] font-extrabold leading-none mt-1 text-white">
                     {totalOverall}
@@ -692,9 +692,6 @@ export default function DashboardSinglePage({ onLogout }) {
                         : selectedCadre === "IN_FIELD"
                           ? "Designation-wise (IN FIELD)"
                           : "Designation-wise (EX-CADRE)"}
-                  </div>
-                  <div className="text-[9px] text-slate-500 -mt-0.5">
-                    Click tile = filter | Details = officer list
                   </div>
                 </div>
 
@@ -805,10 +802,6 @@ export default function DashboardSinglePage({ onLogout }) {
                 <div className="leading-tight">
                   <div className="font-extrabold text-slate-800 text-[18px]">
                     District-wise
-                  </div>
-                  <div className="text-[11px] text-slate-500">
-                    Click tile = filter designations | Details = officer list by
-                    district
                   </div>
                 </div>
 

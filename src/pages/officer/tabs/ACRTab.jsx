@@ -9,8 +9,19 @@ import {
   Users,
   AlertTriangle,
   Gavel,
+  TrendingUp,
 } from "lucide-react";
-import { safeText, toDDMMYYYY } from "../officerUtils/officerFormat";
+import { safeText, toDDMMYYYY, parseDateSafe } from "../officerUtils/officerFormat";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from "recharts";
 
 const g = (r, ...keys) => {
   for (const k of keys) {
@@ -29,6 +40,15 @@ const ACR_BAND_BY_CODE = {
   4: "D",
 };
 
+// Trend axis ordering (best at top).
+const ACR_GRADE_ORDER = ["A1", "A", "B", "C", "D"];
+const ACR_GRADE_TO_ORD = Object.fromEntries(
+  ACR_GRADE_ORDER.map((g, i) => [g, i + 1]),
+);
+const ACR_ORD_TO_GRADE = Object.fromEntries(
+  ACR_GRADE_ORDER.map((g, i) => [i + 1, g]),
+);
+
 function formatAcrBandGrade(raw) {
   if (raw === null || raw === undefined) return "—";
   if (typeof raw === "number" && Number.isFinite(raw)) {
@@ -44,6 +64,194 @@ function formatAcrBandGrade(raw) {
   if (upper === "A1" || upper === "AI") return "A1";
   if (["A", "B", "C", "D"].includes(upper)) return upper;
   return s;
+}
+
+/** Numeric band 1–4 for averaging (1=A1 best … 4=D). */
+function acrValueToBandNumber(raw) {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    const n = Math.trunc(raw);
+    if (n >= 1 && n <= 4) return n;
+  }
+  const s = String(raw).trim();
+  if (!s) return null;
+  const n = parseInt(s, 10);
+  if (String(n) === s && n >= 1 && n <= 4) return n;
+  const upper = s.toUpperCase().replace(/\s+/g, "");
+  if (upper === "A1" || upper === "AI") return 1;
+  if (upper === "A") return 2;
+  if (upper === "B" || upper === "C") return 3;
+  if (upper === "D") return 4;
+  return null;
+}
+
+function acrValueToGrade(raw) {
+  const g1 = formatAcrBandGrade(raw);
+  if (g1 === "—") return null;
+  const u = String(g1).trim().toUpperCase();
+  if (ACR_GRADE_TO_ORD[u]) return u;
+  return null;
+}
+
+function modeGrade(grades) {
+  const list = (grades || []).filter(Boolean);
+  if (!list.length) return null;
+  const counts = new Map();
+  for (const g of list) counts.set(g, (counts.get(g) || 0) + 1);
+  // Highest frequency; tie-break by worse grade (higher ord) for safety.
+  let best = null;
+  let bestC = -1;
+  let bestOrd = -1;
+  for (const [g, c] of counts.entries()) {
+    const ord = ACR_GRADE_TO_ORD[g] || 999;
+    if (c > bestC || (c === bestC && ord > bestOrd)) {
+      best = g;
+      bestC = c;
+      bestOrd = ord;
+    }
+  }
+  return best;
+}
+
+function buildAcrRatingTrendByYear(acrRows) {
+  const list = Array.isArray(acrRows) ? acrRows : [];
+  const byYear = {};
+  for (const row of list) {
+    // Prefer explicit YEAR columns when the backend provides them.
+    const yearFromRow = (() => {
+      const y = g(
+        row,
+        "YEAR",
+        "ACR_YEAR",
+        "REPORT_YEAR",
+        "REPORTING_YEAR",
+        "YEAROFACR",
+        "YEAR_OF_ACR",
+      );
+      const n = Number(String(y ?? "").trim());
+      return Number.isFinite(n) && n > 1900 ? n : null;
+    })();
+
+    const from = g(row, "FROM_DATE", "from_date");
+    const to = g(row, "TO_DATE", "to_date");
+    // If the period spans two years, the end date year is typically the reporting year.
+    const dFrom = parseDateSafe(from);
+    const dTo = parseDateSafe(to);
+    const d = dTo || dFrom;
+    const year = yearFromRow ?? d?.getFullYear();
+    if (!year || !Number.isFinite(year)) continue;
+    const pqG = acrValueToGrade(
+      g(row, "PARTII_PERSOLQUALITIES", "partii_persolqualities"),
+    );
+    const attG = acrValueToGrade(
+      g(row, "PARTIII_ATTITUDES", "partiii_attitudes"),
+    );
+    const profG = acrValueToGrade(
+      g(row, "PARTIV_PROFICIENCYINJOB", "partiv_proficiencyinjob"),
+    );
+    const ords = [pqG, attG, profG]
+      .filter(Boolean)
+      .map((gg) => ACR_GRADE_TO_ORD[gg])
+      .filter((n) => typeof n === "number" && Number.isFinite(n));
+    if (!ords.length) continue;
+    // Average ordinal for the period (still grade-based, but avoids “flat” mode ties).
+    const periodOrdAvg = ords.reduce((a, b) => a + b, 0) / ords.length;
+    if (!byYear[year]) byYear[year] = [];
+    byYear[year].push(periodOrdAvg);
+  }
+  return Object.keys(byYear)
+    .map((y) => {
+      const yy = Number(y);
+      const arr = byYear[y];
+      const avgOrd = arr.reduce((a, b) => a + b, 0) / arr.length;
+      const rounded = Math.min(5, Math.max(1, Math.round(avgOrd)));
+      const grade = ACR_ORD_TO_GRADE[rounded] || null;
+      return {
+        year: yy,
+        avgOrd: Number(avgOrd.toFixed(3)),
+        gradeOrd: rounded,
+        grade,
+        reports: arr.length,
+      };
+    })
+    .sort((a, b) => a.year - b.year);
+}
+
+export function AcrRatingTrendChart({ acrRows }) {
+  const data = useMemo(() => buildAcrRatingTrendByYear(acrRows), [acrRows]);
+  if (!data.length) return null;
+
+  return (
+    <div className="rounded-3xl border border-amber-200/70 bg-gradient-to-br from-amber-50/50 via-white to-orange-50/40 p-4 shadow-md ring-1 ring-amber-100/60">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md">
+            <TrendingUp size={20} strokeWidth={2.25} />
+          </span>
+          <div>
+            <h3 className="text-[13px] font-black text-slate-900">
+              ACR rating trend by year
+            </h3>
+            <p className="text-[10px] font-bold text-slate-500">
+              Trend uses A1/A/B/C/D grade (mode of Parts II–IV per period) —
+              A1 is strongest
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="h-[280px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart
+            data={data}
+            margin={{ top: 8, right: 16, left: 4, bottom: 8 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
+            <XAxis
+              dataKey="year"
+              tick={{ fontSize: 11, fontWeight: 800 }}
+              tickFormatter={(v) => String(v)}
+            />
+            <YAxis
+              // A1 is best (1) — show best at the top.
+              reversed
+              domain={[5, 1]}
+              ticks={[1, 2, 3, 4, 5]}
+              tick={{ fontSize: 11, fontWeight: 700 }}
+              tickFormatter={(v) => ACR_ORD_TO_GRADE[v] || String(v)}
+            />
+            <Tooltip
+              contentStyle={{
+                borderRadius: 12,
+                fontWeight: 700,
+                fontSize: 12,
+              }}
+              formatter={(val, _name, props) => {
+                const ord = Number(val);
+                const g = ACR_ORD_TO_GRADE[Math.round(ord)] || "—";
+                const r = props?.payload?.reports;
+                const rp = typeof r === "number" ? ` · ${r} report(s)` : "";
+                const avg = props?.payload?.avgOrd;
+                const avgPart =
+                  typeof avg === "number" ? ` · avg ${avg.toFixed(2)}` : "";
+                return [`${g}${avgPart}${rp}`, "Grade"];
+              }}
+              labelFormatter={(l) => `Year ${l}`}
+            />
+            <Legend />
+            <Line
+              type="linear"
+              dataKey="avgOrd"
+              name="Grade (A1→D)"
+              stroke="#c2410c"
+              strokeWidth={3}
+              dot={{ r: 5, fill: "#ea580c", strokeWidth: 2, stroke: "#fff" }}
+              activeDot={{ r: 7 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
 }
 
 const isMarked = (v) => {
@@ -501,8 +709,41 @@ function AdverseAndAppealsSection({ row }) {
   );
 }
 
-function buildPartViRows(r, prefix) {
-  const p = prefix;
+/** Roman labels on form ↔ numeric suffixes used in some DB exports */
+const ROMAN_DIGIT = {
+  I: "1",
+  II: "2",
+  III: "3",
+  IV: "4",
+  V: "5",
+};
+
+/** First populated matrix cell among naming variants (Oracle/API casing + numeric suffix). */
+function matrixMark(row, prefixes, suffix, role) {
+  const digit = ROMAN_DIGIT[suffix];
+  const keys = [];
+  for (const p of prefixes) {
+    const romanKeys = [
+      `${p}_${suffix}_${role}`,
+      `${p}_${suffix}_${role}`.toUpperCase(),
+      `${p}_${suffix}_${role}`.toLowerCase(),
+    ];
+    keys.push(...romanKeys);
+    if (digit) {
+      const numKeys = [
+        `${p}_${digit}_${role}`,
+        `${p}_${digit}_${role}`.toUpperCase(),
+        `${p}_${digit}_${role}`.toLowerCase(),
+      ];
+      keys.push(...numKeys);
+    }
+  }
+  return g(row, ...keys);
+}
+
+function buildPartViRows(r, prefix, options = {}) {
+  const altPrefixes = options.altPrefixes ?? [];
+  const prefixes = [prefix, ...altPrefixes];
   const map = {
     OVER_ALL_GRADING: OVERALL_ROWS,
     FIT_PRO: FIT_ROWS,
@@ -512,13 +753,11 @@ function buildPartViRows(r, prefix) {
   if (!defs) return [];
   return defs.map((d) => {
     const suf = d.suffix;
-    const rKey = `${p}_${suf}_R`;
-    const cKey = `${p}_${suf}_C`;
     return {
-      key: `${p}_${suf}`,
+      key: `${prefix}_${suf}`,
       label: d.label,
-      r: isMarked(g(r, rKey, rKey.toUpperCase())),
-      c: isMarked(g(r, cKey, cKey.toUpperCase())),
+      r: isMarked(matrixMark(r, prefixes, suf, "R")),
+      c: isMarked(matrixMark(r, prefixes, suf, "C")),
     };
   });
 }
@@ -539,7 +778,9 @@ function ACRPeriodCard({ row }) {
 
   const overallRows = buildPartViRows(row, "OVER_ALL_GRADING");
   const fitRows = buildPartViRows(row, "FIT_PRO");
-  const integRows = buildPartViRows(row, "INTEG");
+  const integRows = buildPartViRows(row, "INTEG", {
+    altPrefixes: ["INTEGRITY"],
+  });
 
   const usefulness = g(row, "USEFULNESS", "usefulness");
 
@@ -699,7 +940,10 @@ export default function ACRTab({ acrLoading, acrRows }) {
             No ACR records found for this officer.
           </div>
         ) : (
-          <ACRPeriodCard row={selectedRow} />
+          <div className="space-y-4">
+            <AcrRatingTrendChart acrRows={list} />
+            <ACRPeriodCard row={selectedRow} />
+          </div>
         )}
       </div>
     </div>
