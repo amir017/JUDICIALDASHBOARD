@@ -23,6 +23,13 @@ import {
   DONUT_PIE_PROPS,
   DONUT_CELL_STROKE,
 } from "../officerUtils/chartColors.js";
+import {
+  buildDistrictTenurePieData,
+  buildInFieldDistrictVisualColors,
+  divisionTenurePieSliceColor as divisionSliceColor,
+} from "./inFieldDistrictMapColors.js";
+
+export { buildDistrictTenurePieData, divisionSliceColor };
 
 /** Extra space so slice labels are not clipped by the SVG viewBox */
 const PIE_CHART_MARGIN = { top: 40, right: 68, bottom: 40, left: 68 };
@@ -491,44 +498,6 @@ const buildDesignationDistribution = (rows, bucket) => {
     .sort((a, b) => b.totalDays - a.totalDays || b.count - a.count);
 };
 
-/** Pie data: each slice = cumulative posting tenure (days) by division (DIVISIONNAME). */
-const buildDistrictTenurePieData = (rows, bucket) => {
-  const filtered = filterByBucket(rows, bucket).filter(
-    (r) => safeText(r._division) && safeText(r._division) !== "Unknown",
-  );
-  if (!filtered.length) return [];
-  const groups = groupRows(filtered, (r) => r._division);
-  const list = Object.entries(groups)
-    .map(([division, g]) => {
-      const totalDays = g.reduce(
-        (sum, r) => sum + Number(r._durationDays || 0),
-        0,
-      );
-      return {
-        label: division,
-        count: g.length,
-        totalDays,
-        avgDays: g.length ? Math.round(totalDays / g.length) : 0,
-      };
-    })
-    .sort((a, b) => b.totalDays - a.totalDays);
-
-  const TOP = 10;
-  if (list.length <= TOP) return list;
-  const head = list.slice(0, TOP);
-  const tail = list.slice(TOP);
-  const otherDays = tail.reduce((s, x) => s + x.totalDays, 0);
-  const otherCount = tail.reduce((s, x) => s + x.count, 0);
-  if (otherDays <= 0) return head;
-  head.push({
-    label: `Other (${tail.length} more)`,
-    count: otherCount,
-    totalDays: otherDays,
-    avgDays: otherCount ? Math.round(otherDays / otherCount) : 0,
-  });
-  return head;
-};
-
 const buildStayTypePie = (rows, bucket) => {
   const filtered = filterByBucket(rows, bucket);
 
@@ -608,8 +577,6 @@ const buildDistrictDesignationStayPie = (rows, bucket, district) => {
 /* -------------------------------- charts --------------------------------- */
 const PIE_COLORS = PERFORMANCE_SLICE_COLORS;
 
-const divisionSliceColor = (idx) =>
-  PIE_COLORS[(idx + 3) % PIE_COLORS.length];
 const designationSliceColor = (idx) =>
   PIE_COLORS[idx % PIE_COLORS.length];
 
@@ -1424,65 +1391,90 @@ function TenurePieDetailCard({
 
 const IN_FIELD_SCOPE = "In Field";
 
-export const DivisionTenurePieChart = ({ rows }) => {
-  const data = useMemo(
-    () => buildDistrictTenurePieData(rows, IN_FIELD_SCOPE),
+export const DivisionTenurePieChart = ({ rows, underMap = false, sliceFills: sliceFillsProp }) => {
+  const { districtTenurePieData, sliceFills: sliceFillsComputed } = useMemo(
+    () => buildInFieldDistrictVisualColors(rows),
     [rows],
   );
+  const data = districtTenurePieData;
+  const sliceFills =
+    sliceFillsProp && sliceFillsProp.length === data.length ? sliceFillsProp : sliceFillsComputed;
+
+  const body = !data.length ? (
+    <div className="rounded-2xl border border-dashed border-cyan-200/80 bg-cyan-50/40 py-12 text-center text-sm font-bold text-slate-500">
+      No In Field district data for this officer.
+    </div>
+  ) : (
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+      <div
+        className={
+          underMap
+            ? "xl:col-span-8 h-[min(480px,52vh)] min-h-[320px] overflow-visible sm:min-h-[360px]"
+            : "xl:col-span-8 h-[640px] min-h-[440px] overflow-visible"
+        }
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart margin={TENURE_PIE_MARGIN}>
+            <Pie
+              data={data}
+              dataKey="totalDays"
+              nameKey="label"
+              cx="50%"
+              cy="50%"
+              {...TENURE_PIE_DONUT}
+              label={tenurePieSliceLabel}
+              labelLine={{ stroke: "#64748b", strokeWidth: 1 }}
+            >
+              {data.map((entry, idx) => (
+                <Cell
+                  key={idx}
+                  fill={sliceFills[idx] ?? divisionSliceColor(idx)}
+                  {...DONUT_CELL_STROKE}
+                />
+              ))}
+            </Pie>
+            <Tooltip content={<CustomTooltip />} />
+            <Legend wrapperStyle={{ paddingTop: 12 }} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div
+        className={
+          underMap
+            ? "xl:col-span-4 space-y-3 max-h-[min(480px,52vh)] overflow-auto pr-1"
+            : "xl:col-span-4 space-y-3 max-h-[640px] overflow-auto pr-1"
+        }
+      >
+        {data.map((x, idx) => (
+          <TenurePieDetailCard
+            key={`${x.label}-${idx}`}
+            title={x.label}
+            sliceColor={sliceFills[idx] ?? divisionSliceColor(idx)}
+            count={x.count}
+            totalDays={x.totalDays}
+            avgDays={x.avgDays}
+            showAvgPosting
+          />
+        ))}
+      </div>
+    </div>
+  );
+
+  if (underMap) {
+    return (
+      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm">
+        <div className="p-4 sm:p-5">{body}</div>
+      </div>
+    );
+  }
 
   return (
     <SectionCard
       title="District-wise tenure (In Field)"
       rightLabel={IN_FIELD_SCOPE}
     >
-      {!data.length ? (
-        <div className="rounded-2xl border border-dashed border-cyan-200/80 bg-cyan-50/40 py-12 text-center text-sm font-bold text-slate-500">
-          No In Field district data for this officer.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-          <div className="xl:col-span-8 h-[640px] min-h-[440px] overflow-visible">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart margin={TENURE_PIE_MARGIN}>
-                <Pie
-                  data={data}
-                  dataKey="totalDays"
-                  nameKey="label"
-                  cx="50%"
-                  cy="50%"
-                  {...TENURE_PIE_DONUT}
-                  label={tenurePieSliceLabel}
-                  labelLine={{ stroke: "#64748b", strokeWidth: 1 }}
-                >
-                  {data.map((entry, idx) => (
-                    <Cell
-                      key={idx}
-                      fill={divisionSliceColor(idx)}
-                      {...DONUT_CELL_STROKE}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{ paddingTop: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="xl:col-span-4 space-y-3 max-h-[640px] overflow-auto pr-1">
-            {data.map((x, idx) => (
-              <TenurePieDetailCard
-                key={`${x.label}-${idx}`}
-                title={x.label}
-                sliceColor={divisionSliceColor(idx)}
-                count={x.count}
-                totalDays={x.totalDays}
-                avgDays={x.avgDays}
-                showAvgPosting
-              />
-            ))}
-          </div>
-        </div>
-      )}
+      {body}
     </SectionCard>
   );
 };

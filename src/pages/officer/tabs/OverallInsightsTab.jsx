@@ -9,6 +9,10 @@ import {
   Compass,
   Target,
   Crown,
+  Route,
+  Lightbulb,
+  Calendar,
+  BarChart3,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -17,15 +21,120 @@ import {
   Cell,
   Tooltip,
   Legend,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
 } from "recharts";
 import Api from "../../../API/Api";
 import { PERFORMANCE_SLICE_COLORS, DONUT_PIE_PROPS, DONUT_CELL_STROKE } from "../officerUtils/chartColors.js";
-import { safeText, parseDateSafe, fmtYMDLong } from "../officerUtils/officerFormat.js";
-import { normalizePostingRows, DivisionTenurePieChart } from "./PostingTransfersTab.jsx";
+import { safeText, parseDateSafe, fmtYMDLong, daysBetween } from "../officerUtils/officerFormat.js";
+import { normalizePostingRows } from "./PostingTransfersTab.jsx";
+import PunjabDivisionsMapTab from "./PunjabDivisionsMapTab.jsx";
+import { livingDivisionCanonFromProfile } from "./punjabMapGeo.js";
 import { PerformanceDisposalYearTrend, PerformanceCategoryYearTrend } from "./PerformanceTab.jsx";
 import { AcrRatingTrendChart } from "./ACRTab.jsx";
 
 const SLICE = PERFORMANCE_SLICE_COLORS;
+
+/** Leave type labels aligned with `LeavesTab` numeric codes. */
+const LEAVE_TYPE_NUM_LABELS = {
+  0: "Casual Leave",
+  1: "Earned Leave",
+  2: "Special Leave",
+  3: "Extra-Ordinary Leave",
+  4: "Ex-Pakistan Leave",
+  5: "Paternity Leave",
+  6: "Maternity Leave",
+};
+
+function leaveCategoryLabel(r) {
+  const raw = r?.leave_type_desc ?? r?.LEAVE_TYPE_DESC;
+  const s = String(raw ?? "").trim();
+  if (s) return s;
+  const t = Number(r?.leave_type ?? r?.LEAVE_TYPE);
+  if (Number.isFinite(t) && LEAVE_TYPE_NUM_LABELS[t] != null) return LEAVE_TYPE_NUM_LABELS[t];
+  return "Other";
+}
+
+/**
+ * Top leave categories by total days; per-year days for multi-line chart (same idea as
+ * `buildCategoryYearTrend` in PerformanceTab).
+ */
+function buildLeaveTypeYearTrend(leaveYearRows, leaveRows, topN = 7) {
+  const byYearLabel = new Map();
+  const typeTotals = new Map();
+
+  const ingest = (year, label, days) => {
+    const d = Number(days) || 0;
+    if (d <= 0) return;
+    typeTotals.set(label, (typeTotals.get(label) || 0) + d);
+    if (!byYearLabel.has(year)) byYearLabel.set(year, new Map());
+    const m = byYearLabel.get(year);
+    m.set(label, (m.get(label) || 0) + d);
+  };
+
+  const yRows = Array.isArray(leaveYearRows) ? leaveYearRows : [];
+  if (yRows.length) {
+    for (const r of yRows) {
+      const y = Number(r?.yr ?? r?.YR);
+      if (!Number.isFinite(y) || y < 1980 || y > 2100) continue;
+      const days = Number(r?.total_days ?? r?.TOTAL_DAYS ?? 0) || 0;
+      ingest(y, leaveCategoryLabel(r), days);
+    }
+  }
+
+  if (!typeTotals.size) {
+    const lRows = Array.isArray(leaveRows) ? leaveRows : [];
+    for (const r of lRows) {
+      const f = parseDateSafe(r?.from_date ?? r?.FROM_DATE);
+      if (!f) continue;
+      const y = f.getFullYear();
+      const t = parseDateSafe(r?.to_date ?? r?.TO_DATE) || new Date();
+      const days = Math.max(1, daysBetween(f, t) + 1);
+      ingest(y, leaveCategoryLabel(r), days);
+    }
+  }
+
+  const topLabels = [...typeTotals.entries()]
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topN)
+    .map(([lbl]) => lbl);
+
+  if (!topLabels.length) {
+    return { data: [], series: [], totalDays: 0 };
+  }
+
+  const yearKeys = [...byYearLabel.keys()].filter((y) => Number.isFinite(y)).sort((a, b) => a - b);
+  if (!yearKeys.length) {
+    return { data: [], series: [], totalDays: 0 };
+  }
+  const y0 = yearKeys[0];
+  const y1 = yearKeys[yearKeys.length - 1];
+  const years = [];
+  for (let y = y0; y <= y1; y += 1) years.push(y);
+
+  const data = years.map((year) => {
+    const row = { year };
+    const m = byYearLabel.get(year) || new Map();
+    topLabels.forEach((label, i) => {
+      row[`lv${i}`] = Number(m.get(label)) || 0;
+    });
+    return row;
+  });
+
+  const series = topLabels.map((label, i) => ({
+    dataKey: `lv${i}`,
+    name: `${label} · days`,
+    color: SLICE[i % SLICE.length],
+  }));
+
+  const totalDays = [...typeTotals.values()].reduce((s, v) => s + v, 0);
+
+  return { data, series, totalDays };
+}
 
 // Performance labels (match PerformanceTab so we can derive “disposal signature”).
 const SESSIONS_LABELS = {
@@ -58,7 +167,7 @@ const PUNJAB_DIVISIONS = [
   "Sahiwal",
 ];
 
-// Approximate HQ coordinates for distance estimates (km). Not GIS-accurate boundaries.
+/** Approximate division HQ (km distances vs other divisions; not boundary-accurate). */
 const DIVISION_CENTROIDS = {
   Lahore: { lat: 31.5204, lon: 74.3587 },
   Rawalpindi: { lat: 33.6844, lon: 73.0479 },
@@ -84,139 +193,6 @@ function haversineKm(a, b) {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-// Schematic “map-like” layout positions (not geographic).
-const DIVISION_MAP_LAYOUT = [
-  { name: "Rawalpindi", x: 64, y: 10 },
-  { name: "Gujrat", x: 46, y: 22 },
-  { name: "Gujranwala", x: 30, y: 30 },
-  { name: "Lahore", x: 28, y: 48 },
-  { name: "Sargodha", x: 56, y: 38 },
-  { name: "Faisalabad", x: 46, y: 54 },
-  { name: "Sahiwal", x: 46, y: 70 },
-  { name: "Multan", x: 62, y: 72 },
-  { name: "Dera Ghazi Khan", x: 78, y: 78 },
-  { name: "Bahawalpur", x: 74, y: 92 },
-];
-
-function PunjabDivisionsSchematicMap({ divisionCounts = {}, currentDivision }) {
-  const max = Math.max(1, ...Object.values(divisionCounts).map((n) => Number(n) || 0));
-  const servedSet = new Set(
-    Object.entries(divisionCounts)
-      .filter(([, v]) => (Number(v) || 0) > 0)
-      .map(([k]) => k),
-  );
-
-  return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-center">
-      <div className="lg:col-span-7">
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <div className="text-[12px] font-black text-slate-900">
-                Punjab divisions (schematic)
-              </div>
-              <div className="mt-0.5 text-[11px] font-bold text-slate-500">
-                Color intensity reflects posting count per division.
-              </div>
-            </div>
-            {currentDivision ? (
-              <span className="rounded-full border border-teal-200/70 bg-teal-50/80 px-3 py-1 text-[11px] font-black text-teal-950">
-                Current: {currentDivision}
-              </span>
-            ) : null}
-          </div>
-
-          <svg viewBox="0 0 100 110" className="w-full h-[340px]">
-            <defs>
-              <linearGradient id="mapBg" x1="0" x2="1" y1="0" y2="1">
-                <stop offset="0%" stopColor="#f8fafc" />
-                <stop offset="100%" stopColor="#ecfeff" />
-              </linearGradient>
-            </defs>
-            <rect x="0" y="0" width="100" height="110" rx="8" fill="url(#mapBg)" />
-
-            {DIVISION_MAP_LAYOUT.map((d, idx) => {
-              const c = Number(divisionCounts[d.name]) || 0;
-              const pct = Math.max(0, Math.min(1, c / max));
-              const base = SLICE[idx % SLICE.length];
-              const fill = c > 0 ? base : "#e2e8f0";
-              const stroke =
-                d.name === currentDivision ? "#0f766e" : "rgba(15,23,42,0.18)";
-              const strokeW = d.name === currentDivision ? 2.2 : 1.2;
-              const opacity = c > 0 ? 0.35 + 0.6 * pct : 0.7;
-
-              return (
-                <g key={d.name}>
-                  <rect
-                    x={d.x - 16}
-                    y={d.y - 8}
-                    width="32"
-                    height="16"
-                    rx="6"
-                    fill={fill}
-                    opacity={opacity}
-                    stroke={stroke}
-                    strokeWidth={strokeW}
-                  />
-                  <text
-                    x={d.x}
-                    y={d.y + 1.5}
-                    textAnchor="middle"
-                    fontSize="3.6"
-                    fontWeight="800"
-                    fill={c > 0 ? "#0b1220" : "#475569"}
-                  >
-                    {d.name}
-                  </text>
-                  <text
-                    x={d.x}
-                    y={d.y + 6.5}
-                    textAnchor="middle"
-                    fontSize="3.2"
-                    fontWeight="900"
-                    fill={c > 0 ? "#0b1220" : "#64748b"}
-                  >
-                    {c > 0 ? c : "—"}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
-
-          <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold text-slate-600">
-            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
-              <span className="h-3 w-3 rounded-sm bg-slate-200 ring-1 ring-black/10" />
-              Not served
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
-              <span className="h-3 w-3 rounded-sm ring-1 ring-black/10" style={{ backgroundColor: SLICE[0] }} />
-              Served (higher count = deeper color)
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-teal-200/70 bg-teal-50/80 px-3 py-1.5 text-teal-950">
-              <span className="h-3 w-3 rounded-sm bg-teal-600 ring-1 ring-black/10" />
-              Current division border
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="lg:col-span-5 space-y-3">
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm">
-          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-            Division coverage
-          </div>
-          <div className="mt-2 text-2xl font-black text-slate-900">
-            {servedSet.size} / {PUNJAB_DIVISIONS.length}
-          </div>
-          <div className="mt-2 text-[11px] font-bold text-slate-600">
-            Served divisions are computed from posting history rows that include `DIVISIONNAME`.
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function sumLabelMap(obj, labelMap) {
@@ -360,7 +336,7 @@ function KpiTile({ label, value, sub, accent = "teal" }) {
   );
 }
 
-function InsightCard({ title, icon: Icon, children, tone = "teal" }) {
+function InsightCard({ title, subtitle, icon: Icon, children, tone = "teal" }) {
   const toneGrad =
     tone === "violet"
       ? "from-violet-600 via-fuchsia-600 to-indigo-700"
@@ -381,6 +357,11 @@ function InsightCard({ title, icon: Icon, children, tone = "teal" }) {
             <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">
               {title}
             </div>
+            {subtitle ? (
+              <p className="mt-1.5 text-xs font-semibold leading-relaxed text-slate-600 sm:text-[13px]">
+                {subtitle}
+              </p>
+            ) : null}
             <div className="mt-3">{children}</div>
           </div>
         </div>
@@ -468,6 +449,10 @@ export default function OverallInsightsTab({
   historyLoading,
   acrRows,
   acrLoading,
+  leaveRows = [],
+  leaveYearRows = [],
+  leaveLoading = false,
+  leaveYearLoading = false,
 }) {
   const pfNo = safeText(profile?.PFNO);
   const [perfPayload, setPerfPayload] = useState(null);
@@ -558,34 +543,49 @@ export default function OverallInsightsTab({
     return { servedSet: served, servedCount: served.size, missing };
   }, [postingItems]);
 
-  const divisionCounts = useMemo(() => {
-    const counts = {};
-    for (const r of postingItems) {
-      const name = String(r?._division || r?.DIVISIONNAME || r?.divisionname || "").trim();
-      if (!name) continue;
-      const u = name.toUpperCase();
-      if (["NONE", "N/A", "NA", "NULL", "UNKNOWN", "-", "—"].includes(u)) continue;
-      counts[name] = (counts[name] || 0) + 1;
-    }
-    return counts;
-  }, [postingItems]);
+  const proposedList = useMemo(() => {
+    const miss = new Set(proposedDivisions.missing);
+    return PUNJAB_DIVISIONS.filter((d) => miss.has(d));
+  }, [proposedDivisions.missing]);
 
-  const currentDivision = useMemo(() => {
-    const n = String(latestPosting?.DIVISIONNAME || latestPosting?.divisionname || "").trim();
-    if (!n) return null;
-    const u = n.toUpperCase();
-    if (["NONE", "N/A", "NA", "NULL", "UNKNOWN", "-", "—"].includes(u)) return null;
-    return n;
-  }, [latestPosting]);
+  const livingDivisionCanon = useMemo(
+    () => livingDivisionCanonFromProfile(profile),
+    [profile],
+  );
 
   const proposedWithDistance = useMemo(() => {
-    const from = currentDivision ? DIVISION_CENTROIDS[currentDivision] : null;
-    return proposedDivisions.missing.map((d) => {
-      const to = DIVISION_CENTROIDS[d];
+    const from = livingDivisionCanon ? DIVISION_CENTROIDS[livingDivisionCanon] : null;
+    return proposedList.map((division) => {
+      const to = DIVISION_CENTROIDS[division];
       const km = from && to ? haversineKm(from, to) : null;
-      return { division: d, km };
+      return { division, km };
     });
-  }, [proposedDivisions.missing, currentDivision]);
+  }, [proposedList, livingDivisionCanon]);
+
+  const proposedRanked = useMemo(
+    () =>
+      proposedWithDistance
+        .slice()
+        .sort((a, b) => {
+          if (a.km == null && b.km == null) return 0;
+          if (a.km == null) return 1;
+          if (b.km == null) return -1;
+          return a.km - b.km;
+        })
+        .slice(0, 8),
+    [proposedWithDistance],
+  );
+
+  const punjabDivisionModelCount = PUNJAB_DIVISIONS.length;
+  const footprintCoveragePct = useMemo(() => {
+    if (!punjabDivisionModelCount) return 0;
+    return Math.min(100, Math.round((proposedDivisions.servedCount / punjabDivisionModelCount) * 100));
+  }, [proposedDivisions.servedCount, punjabDivisionModelCount]);
+
+  const { data: leaveYearTrendData, series: leaveYearTrendSeries, totalDays: leaveTrendTotalDays } =
+    useMemo(() => buildLeaveTypeYearTrend(leaveYearRows, leaveRows, 7), [leaveYearRows, leaveRows]);
+
+  const leavesDataLoading = leaveLoading || leaveYearLoading;
 
   return (
     <div className="space-y-6 min-w-[320px]">
@@ -678,6 +678,16 @@ export default function OverallInsightsTab({
         </div>
       </div>
 
+      <Section title="Posting map" icon={MapPin}>
+        {historyLoading ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-500 animate-pulse">
+            Loading posting history…
+          </div>
+        ) : (
+          <PunjabDivisionsMapTab historyRows={historyRows} profile={profile} />
+        )}
+      </Section>
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="lg:col-span-7">
           <InsightCard title="Disposal signature" icon={Crown} tone="violet">
@@ -735,72 +745,123 @@ export default function OverallInsightsTab({
         </div>
 
         <div className="lg:col-span-5">
-          <InsightCard title="Proposed posting (new exposure)" icon={Compass} tone="teal">
-            <div className="text-sm font-semibold text-slate-600">
-              Suggested divisions not present in posting history.
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {proposedWithDistance.length ? (
-                proposedWithDistance
-                  .slice()
-                  .sort((a, b) => {
-                    if (a.km == null && b.km == null) return 0;
-                    if (a.km == null) return 1;
-                    if (b.km == null) return -1;
-                    return a.km - b.km;
-                  })
-                  .slice(0, 6)
-                  .map((x, i) => (
-                  <span
-                    key={x.division}
-                    className="inline-flex items-center gap-2 rounded-full border border-teal-200/70 bg-gradient-to-r from-teal-50/90 to-cyan-50/40 px-3 py-1.5 text-[11px] font-black text-teal-950 shadow-sm"
-                  >
-                    <span
-                      className="h-3 w-3 rounded-sm ring-1 ring-black/15"
-                      style={{ backgroundColor: SLICE[(i + 5) % SLICE.length] }}
-                    />
-                    {x.division}
-                    {typeof x.km === "number" ? (
-                      <span className="ml-1 rounded-full border border-teal-200/70 bg-white/70 px-2 py-0.5 text-[10px] font-black text-teal-900">
-                        ~{Math.round(x.km)} km
-                      </span>
-                    ) : null}
-                  </span>
-                ))
-              ) : (
-                <span className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[12px] font-bold text-slate-600">
-                  No missing division detected from current posting history.
-                </span>
-              )}
-            </div>
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[11px] font-bold text-slate-600">
-              Tip: add/verify `DIVISIONNAME` in posting history rows for more accurate recommendations.
-            </div>
+          <InsightCard title="Proposed posting" icon={Compass} tone="teal">
+            {proposedRanked.length ? (
+              <div className="space-y-4">
+                <div className="relative overflow-hidden rounded-2xl border border-teal-200/60 bg-gradient-to-br from-teal-50/90 via-white to-cyan-50/50 p-4 shadow-sm ring-1 ring-teal-100/40">
+                  <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-teal-400/20 blur-2xl" />
+                  <div className="relative flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-teal-200/80 bg-white/90 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-teal-900 shadow-sm">
+                      <Lightbulb className="h-3.5 w-3.5" strokeWidth={2.4} />
+                      Suggestion lens
+                    </span>
+                  </div>
+                  <div className="relative mt-3 grid grid-cols-3 gap-2 sm:gap-3">
+                    <div className="rounded-xl border border-white/80 bg-white/70 px-2.5 py-2 text-center shadow-sm ring-1 ring-slate-900/5 sm:px-3">
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Uncovered</div>
+                      <div className="mt-0.5 text-lg font-black tabular-nums text-teal-950 sm:text-xl">
+                        {proposedDivisions.missing.length}
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-500">of {punjabDivisionModelCount}</div>
+                    </div>
+                    <div className="rounded-xl border border-white/80 bg-white/70 px-2.5 py-2 text-center shadow-sm ring-1 ring-slate-900/5 sm:px-3">
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Footprint</div>
+                      <div className="mt-0.5 text-lg font-black tabular-nums text-slate-900 sm:text-xl">
+                        {footprintCoveragePct}%
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-500">divisions touched</div>
+                    </div>
+                    <div className="rounded-xl border border-white/80 bg-white/70 px-2.5 py-2 text-center shadow-sm ring-1 ring-slate-900/5 sm:px-3">
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Distance</div>
+                      <div className="mt-0.5 line-clamp-2 text-[11px] font-black leading-tight text-slate-900 sm:text-sm">
+                        {livingDivisionCanon ? (
+                          <>From {livingDivisionCanon}</>
+                        ) : (
+                          <span className="text-slate-500">Residence n/a</span>
+                        )}
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-500">HQ approx.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      Ranked candidates
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
+                      <Route className="h-3.5 w-3.5 text-teal-600" strokeWidth={2.4} />
+                      Nearest first
+                    </div>
+                  </div>
+                  <ul className="space-y-2">
+                    {proposedRanked.map((row, i) => (
+                      <li
+                        key={row.division}
+                        className="group relative flex items-center gap-3 overflow-hidden rounded-2xl border border-teal-100/90 bg-gradient-to-r from-white via-teal-50/30 to-cyan-50/20 px-3 py-2.5 shadow-sm ring-1 ring-teal-900/5 transition-[box-shadow,transform] hover:shadow-md sm:px-4 sm:py-3"
+                      >
+                        <span
+                          className="absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-gradient-to-b from-teal-500 to-cyan-500 opacity-90"
+                          aria-hidden
+                        />
+                        <div className="flex min-w-0 flex-1 items-center gap-3 pl-1">
+                          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-teal-600 to-cyan-600 text-[11px] font-black text-white shadow-sm ring-2 ring-white/50 sm:h-10 sm:w-10 sm:text-xs">
+                            #{i + 1}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                              <span className="text-base font-black tracking-tight text-slate-900 sm:text-lg">
+                                {row.division}
+                              </span>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700/90">
+                                Not in history
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          {typeof row.km === "number" ? (
+                            <div className="rounded-xl border border-teal-200/80 bg-white/95 px-2.5 py-1.5 shadow-sm">
+                              <div className="text-[9px] font-black uppercase tracking-widest text-teal-700">
+                                Approx.
+                              </div>
+                              <div className="text-sm font-black tabular-nums text-teal-950 sm:text-base">
+                                ~{Math.round(row.km)} km
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                              <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Km</div>
+                              <div className="text-xs font-black text-slate-600">n/a</div>
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <div className="relative overflow-hidden rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50/80 via-white to-teal-50/40 p-5 text-center shadow-sm ring-1 ring-emerald-100/50">
+                <div className="pointer-events-none absolute -left-10 -bottom-10 h-32 w-32 rounded-full bg-emerald-300/25 blur-2xl" />
+                <div className="relative mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-lg ring-4 ring-white/80">
+                  <BadgeCheck className="h-7 w-7" strokeWidth={2.2} />
+                </div>
+                <div className="relative mt-3 text-base font-black text-slate-900">Full division footprint</div>
+                <p className="relative mx-auto mt-2 max-w-sm text-sm font-semibold leading-relaxed text-slate-600">
+                  Every division in this Punjab model already appears in your posting history — there is nothing left to
+                  surface as a “new exposure” suggestion here.
+                </p>
+                <div className="relative mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-200/80 bg-white/90 px-3 py-1.5 text-[11px] font-bold text-emerald-900 shadow-sm">
+                  <MapPin className="h-3.5 w-3.5" />
+                  Served {proposedDivisions.servedCount} of {punjabDivisionModelCount} divisions
+                </div>
+              </div>
+            )}
           </InsightCard>
         </div>
       </div>
-
-      <Section
-        title="Posting map & distances"
-        subtitle="Schematic Punjab divisions map + estimated inter-division distances (HQ-to-HQ)"
-        icon={MapPin}
-        right={
-          <Pill tone="dark">
-            {currentDivision ? `From ${currentDivision}` : "Distance: unavailable"}
-          </Pill>
-        }
-      >
-        {historyLoading ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-500 animate-pulse">
-            Loading posting history…
-          </div>
-        ) : (
-          <PunjabDivisionsSchematicMap
-            divisionCounts={divisionCounts}
-            currentDivision={currentDivision}
-          />
-        )}
-      </Section>
 
       <Section
         title="In Field vs Ex-Cadre"
@@ -821,8 +882,6 @@ export default function OverallInsightsTab({
           <PostingScopeDonut items={postingItems} />
         )}
       </Section>
-
-      <DivisionTenurePieChart rows={postingItems} />
 
       <Section
         title="Performance trends"
@@ -853,6 +912,73 @@ export default function OverallInsightsTab({
           </div>
         ) : (
           <AcrRatingTrendChart acrRows={acrRows} />
+        )}
+      </Section>
+
+      <Section
+        title="Leaves trend"
+        subtitle="Leave types over calendar years — same layout as performance category trend (one line per top type, days on Y)"
+        icon={Calendar}
+        right={
+          <Pill tone="dark">
+            {leavesDataLoading
+              ? "Loading…"
+              : `${Math.round(leaveTrendTotalDays).toLocaleString()} days · ${leaveYearTrendSeries.length} type${
+                  leaveYearTrendSeries.length === 1 ? "" : "s"
+                }`}
+          </Pill>
+        }
+      >
+        {leavesDataLoading ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-500 animate-pulse">
+            Loading leave data…
+          </div>
+        ) : !leaveYearTrendData.length || !leaveYearTrendSeries.length ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-10 text-center text-sm font-bold text-slate-600">
+            No leave rows yet to build a category trend by year.
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-[0_20px_50px_-26px_rgba(15,23,42,0.12)] ring-1 ring-slate-100/80 sm:p-5">
+            <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-slate-200/70 pb-4">
+              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-violet-700 via-indigo-600 to-sky-700 text-white shadow-lg shadow-indigo-500/25">
+                <BarChart3 className="h-5 w-5" strokeWidth={2.25} />
+              </div>
+              <div>
+                <h3 className="text-[14px] font-black text-slate-900">Leave type trend by year</h3>
+                <p className="text-[11px] font-bold text-slate-500">
+                  Top leave categories by total days — one line per category (year-wise API when available; else from
+                  leave records)
+                </p>
+              </div>
+            </div>
+            <div className="h-[320px] w-full min-w-0 sm:h-[340px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={leaveYearTrendData} margin={{ top: 8, right: 12, left: 4, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="year" tick={{ fontSize: 11, fontWeight: 800 }} />
+                  <YAxis tick={{ fontSize: 11, fontWeight: 700 }} />
+                  <Tooltip
+                    formatter={(value, name) => [`${Number(value).toLocaleString()} days`, name]}
+                    labelFormatter={(y) => `Year ${y}`}
+                    contentStyle={{ borderRadius: 12, fontWeight: 700, fontSize: 12 }}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: 4, fontSize: 11 }} />
+                  {leaveYearTrendSeries.map((s) => (
+                    <Line
+                      key={s.dataKey}
+                      type="monotone"
+                      dataKey={s.dataKey}
+                      name={s.name}
+                      stroke={s.color}
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      connectNulls
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         )}
       </Section>
     </div>

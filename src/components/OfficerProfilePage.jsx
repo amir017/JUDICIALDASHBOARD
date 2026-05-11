@@ -29,6 +29,7 @@ import ExamsTab from "../pages/officer/tabs/ExamsTab.jsx";
 import PerformanceTab from "../pages/officer/tabs/PerformanceTab.jsx";
 import ACRTab from "../pages/officer/tabs/ACRTab.jsx";
 import OverallInsightsTab from "../pages/officer/tabs/OverallInsightsTab.jsx";
+import PunjabDivisionsMapTab from "../pages/officer/tabs/PunjabDivisionsMapTab.jsx";
 
 import {
   safeText,
@@ -496,7 +497,7 @@ export default function OfficerProfilePage({ onLogout }) {
   const [acrRows, setAcrRows] = useState([]);
   const [acrLoading, setAcrLoading] = useState(false);
 
-  const [activeTab, setActiveTab] = useState("postingAnalysis");
+  const [activeTab, setActiveTab] = useState("overallInsights");
 
   /** Which officerId each lazy tab last loaded for (cleared when officerId changes). */
   const tabDataOfficerRef = useRef({});
@@ -611,7 +612,7 @@ export default function OfficerProfilePage({ onLogout }) {
   }, [officerId, activeTab]);
 
   useEffect(() => {
-    if (!officerId || activeTab !== "leaves") return;
+    if (!officerId || (activeTab !== "leaves" && activeTab !== "overallInsights")) return;
     if (tabDataOfficerRef.current.leaves === officerId) return;
     let cancelled = false;
     (async () => {
@@ -976,6 +977,13 @@ export default function OfficerProfilePage({ onLogout }) {
                   </ToggleBtn>
 
                   <ToggleBtn
+                    active={activeTab === "punjabDivisionsMap"}
+                    onClick={() => setActiveTab("punjabDivisionsMap")}
+                  >
+                    Punjab Map
+                  </ToggleBtn>
+
+                  <ToggleBtn
                     active={activeTab === "postingAnalysis"}
                     onClick={() => setActiveTab("postingAnalysis")}
                   >
@@ -1091,7 +1099,13 @@ export default function OfficerProfilePage({ onLogout }) {
                   historyLoading={historyLoading}
                   acrRows={acrRows}
                   acrLoading={acrLoading}
+                  leaveRows={leaveRows}
+                  leaveYearRows={leaveYearRows}
+                  leaveLoading={leaveLoading}
+                  leaveYearLoading={leaveYearLoading}
                 />
+              ) : activeTab === "punjabDivisionsMap" ? (
+                <PunjabDivisionsMapTab historyRows={historyRows} profile={profile} />
               ) : activeTab === "postingAnalysis" ? (
                 <PostingTransfersTab
                   historyRows={historyRows}

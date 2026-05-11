@@ -1,0 +1,42 @@
+punjab_divisions.geojson
+------------------------
+Derived from Pakistan ADM2 (admin level 2 = Division) boundaries.
+
+Upstream repository: https://github.com/PakData/GISData
+Source file: PAK-GeoJSON/PAK_adm2.json (same data as GADM / Global Administrative Areas).
+
+This extract includes only features where NAME_1 = "Punjab" (Punjab province, Pakistan).
+Each feature.properties.division matches the Wikipedia-style name without the word "Division"
+(e.g. "Lahore", "Dera Ghazi Khan").
+
+Coverage note (important)
+-------------------------
+The PakData/GISData ADM2 layer reflects an older GADM snapshot: it contains 8 division
+polygons for Punjab. **Sahiwal** is not a separate ADM2 polygon there; this repo’s
+`punjab_divisions.geojson` adds Sahiwal by merging the relevant ADM3 districts
+(Sahiwal, Pakpattan, Okara, Okara 1) from `PAK_adm3.json` (see
+`scripts/build-punjab-divisions-geojson.mjs`). **Gujrat** is still not a separate polygon
+in this ADM2 extract; for a full 10-division map, merge ADM3 for Gujrat, use a newer
+release, or update polygons manually.
+
+Alternative open dataset (newer boundaries, CC-BY 4.0)
+--------------------------------------------------------
+geoBoundaries gbOpen Pakistan ADM2 (GeoJSON; use release zip or git clone with Git LFS):
+https://www.geoboundaries.org/
+https://data.humdata.org/dataset/geoboundaries-admin-boundaries-for-pakistan
+
+GADM license
+------------
+Review https://gadm.org/license.html before commercial redistribution. PakData documents
+GADM as the origin in its README.
+
+pakistan_provinces.geojson
+--------------------------
+Pakistan provinces / territories at administrative level 1 (ADM1).
+
+Upstream: https://github.com/PakData/GISData — `PAK-GeoJSON/PAK_adm1.json`.
+
+Rebuild:
+  node scripts/build-pakistan-provinces-geojson.mjs
+
+Bundled copy: `src/data/pakistan_provinces.json` (same GeoJSON for Vite import).
